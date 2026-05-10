@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -14,6 +14,7 @@ from config import get_settings
 from models import (
     ChatRequest,
     DeleteResponse,
+    GraphSnapshot,
     HealthResponse,
     KnowledgeBaseCreateRequest,
     KnowledgeBaseUpdateRequest,
@@ -21,6 +22,8 @@ from models import (
 )
 from providers.embedding_provider import EmbeddingProvider
 from rag.catalog import MetadataCatalog
+from rag.graph_extractor import GraphExtractor
+from rag.graph_store import GraphStore
 from rag.ingest import IngestionService
 from retrieval.dense_search import DenseRetriever
 from retrieval.hybrid_search import HybridRetriever
@@ -33,7 +36,17 @@ sparse_retriever = SparseRetriever(settings)
 hybrid_retriever = HybridRetriever(settings, dense_retriever, sparse_retriever)
 chunker = StructuralChunker(settings.chunk_size_tokens, settings.chunk_overlap_tokens)
 catalog = MetadataCatalog(settings)
-ingestion_service = IngestionService(settings, chunker, dense_retriever, sparse_retriever, catalog)
+graph_extractor = GraphExtractor()
+graph_store = GraphStore(settings)
+ingestion_service = IngestionService(
+    settings,
+    chunker,
+    dense_retriever,
+    sparse_retriever,
+    catalog,
+    graph_extractor,
+    graph_store,
+)
 orchestrator = OrchestratorAgent(settings)
 knowledge_agent = KnowledgeAgent(settings)
 
@@ -89,6 +102,16 @@ async def upload(kb_id: str, files: list[UploadFile] = File(...)) -> dict[str, o
 @app.get("/kb/{kb_id}/documents")
 def list_documents(kb_id: str) -> list[dict[str, object]]:
     return [document.model_dump() for document in ingestion_service.list_documents(kb_id)]
+
+
+@app.get("/kb/{kb_id}/graph", response_model=GraphSnapshot)
+def get_graph(
+    kb_id: str,
+    limit: int = Query(default=18, ge=1, le=64),
+    min_weight: int = Query(default=1, ge=1, le=10),
+) -> GraphSnapshot:
+    catalog.get_kb(kb_id)
+    return graph_store.get_snapshot(kb_id=kb_id, limit=limit, min_weight=min_weight)
 
 
 @app.delete("/kb/{kb_id}/documents/{document_id}", response_model=DeleteResponse)

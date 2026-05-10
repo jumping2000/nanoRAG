@@ -63,16 +63,17 @@ class MetadataCatalog:
 
         raise HTTPException(status_code=404, detail=f"Unknown knowledge base: {kb_id}")
 
-    def delete_kb(self, kb_id: str) -> None:
+    def delete_kb(self, kb_id: str) -> bool:
         kb_map = self._load_kb_map()
-        if kb_id not in kb_map:
-            raise HTTPException(status_code=404, detail=f"Unknown knowledge base: {kb_id}")
+        deleted = kb_id in kb_map
 
-        kb_map.pop(kb_id)
-        self._save_kb_map(kb_map)
+        if deleted:
+            kb_map.pop(kb_id)
+            self._save_kb_map(kb_map)
 
         documents = [document for document in self._load_documents() if document.kb_id != kb_id]
         self._save_documents(documents)
+        return deleted
 
     def get_kb(self, kb_id: str) -> KnowledgeBaseRecord:
         for kb in self.list_kbs():

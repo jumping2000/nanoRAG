@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -41,6 +43,20 @@ class ChunkMetadata(BaseModel):
     token_count: int
 
 
+class ExtractedEntity(BaseModel):
+    label: str = Field(min_length=1)
+    canonical_id: str = Field(min_length=1)
+    entity_type: str = "concept"
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class ExtractedRelation(BaseModel):
+    source: ExtractedEntity
+    target: ExtractedEntity
+    predicate: str = Field(min_length=1)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class RetrievedChunk(ChunkMetadata):
     score: float = 0.0
     rank: int = 0
@@ -54,6 +70,45 @@ class SourceCitation(BaseModel):
     page: int | None = None
     section: str | None = None
     score: float = 0.0
+
+
+class GraphEvidence(BaseModel):
+    chunk_id: str
+    document_id: str
+    filename: str
+    page: int | None = None
+    section: str | None = None
+    snippet: str
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class GraphNode(BaseModel):
+    id: str
+    label: str
+    entity_type: str
+    mentions: int = 0
+
+
+class GraphEdge(BaseModel):
+    id: str
+    source: str
+    target: str
+    predicate: str
+    weight: int = 1
+    evidence: list[GraphEvidence] = Field(default_factory=list)
+
+
+class GraphStats(BaseModel):
+    nodes: int = 0
+    edges: int = 0
+    mentions: int = 0
+
+
+class GraphSnapshot(BaseModel):
+    kb_id: str
+    nodes: list[GraphNode] = Field(default_factory=list)
+    edges: list[GraphEdge] = Field(default_factory=list)
+    stats: GraphStats = Field(default_factory=GraphStats)
 
 
 class ChatRequest(BaseModel):
@@ -70,6 +125,18 @@ class UploadResponse(BaseModel):
 
 class DeleteResponse(BaseModel):
     status: str = "ok"
+
+
+class DeleteStoreResult(BaseModel):
+    store: str
+    status: Literal["deleted", "already_absent", "failed"]
+    detail: str | None = None
+
+
+class KnowledgeBaseDeleteResult(BaseModel):
+    kb_id: str
+    status: Literal["ok", "partial_failure"]
+    stores: list[DeleteStoreResult] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

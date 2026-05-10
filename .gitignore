@@ -6,8 +6,11 @@ backend/__pycache__/
 backend/**/*.pyc
 backend/data/uploads/
 backend/data/chunks.jsonl
+backend/data/documents.json
+backend/data/knowledge_graph.db
 frontend/node_modules/
 frontend/.next/
 .env
 AGENTS.md
 prompt.txt
+graph_evolution.md

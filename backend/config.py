@@ -38,6 +38,7 @@ class Settings:
     chunks_store_path: Path
     knowledge_bases_store_path: Path
     documents_store_path: Path
+    graph_store_path: Path
     prompt_path: Path
 
 
@@ -88,5 +89,6 @@ def get_settings() -> Settings:
         chunks_store_path=data_dir / "chunks.jsonl",
         knowledge_bases_store_path=data_dir / "knowledge_bases.json",
         documents_store_path=data_dir / "documents.json",
+        graph_store_path=data_dir / "knowledge_graph.db",
         prompt_path=BASE_DIR / "prompts" / "system.md",
     )

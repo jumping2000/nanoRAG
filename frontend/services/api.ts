@@ -1,5 +1,6 @@
 import type {
   DocumentSummary,
+  GraphSnapshot,
   KnowledgeBase,
   KnowledgeBasePayload,
   SourceCitation,
@@ -179,4 +180,26 @@ export async function deleteKnowledgeBaseDocument(
   if (!response.ok) {
     throw new Error(`Document delete failed with status ${response.status}`);
   }
+}
+
+export async function getKnowledgeGraph(
+  kbId: string,
+  options?: { limit?: number; minWeight?: number },
+): Promise<GraphSnapshot> {
+  const params = new URLSearchParams();
+  if (options?.limit) {
+    params.set("limit", String(options.limit));
+  }
+  if (options?.minWeight) {
+    params.set("min_weight", String(options.minWeight));
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/kb/${encodeURIComponent(kbId)}/graph?${params.toString()}`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw new Error(`Graph request failed with status ${response.status}`);
+  }
+  return (await response.json()) as GraphSnapshot;
 }

@@ -25,6 +25,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import { ChatMarkdown } from "@/components/chat-markdown";
+import { KnowledgeGraphPanel } from "@/components/knowledge-graph-panel";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -635,15 +636,7 @@ export function NanoRagShell() {
               />
             </div>
           ) : (
-            <div className="mt-5 rounded-[1.6rem] border border-dashed border-border/80 bg-background/65 p-6 text-center">
-              <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-primary/12 text-primary">
-                <Network className="size-5" />
-              </div>
-              <h3 className="mt-4 text-base font-medium">Knowledge graph placeholder</h3>
-              <p className="mt-2 text-sm text-foreground/55">
-                Questa versione mantiene il focus su retrieval grounding. Il pannello è pronto per una vista entità/relazioni senza aggiungere complessità prematura.
-              </p>
-            </div>
+            <KnowledgeGraphPanel kbId={activeKnowledgeBase.id} />
           )}
         </Card>
       </section>

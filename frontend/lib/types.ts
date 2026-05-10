@@ -46,3 +46,42 @@ export type DocumentSummary = {
   chunk_count: number;
   created_at: string;
 };
+
+export type GraphEvidence = {
+  chunk_id: string;
+  document_id: string;
+  filename: string;
+  page?: number | null;
+  section?: string | null;
+  snippet: string;
+  confidence: number;
+};
+
+export type GraphNode = {
+  id: string;
+  label: string;
+  entity_type: string;
+  mentions: number;
+};
+
+export type GraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  predicate: string;
+  weight: number;
+  evidence: GraphEvidence[];
+};
+
+export type GraphStats = {
+  nodes: number;
+  edges: number;
+  mentions: number;
+};
+
+export type GraphSnapshot = {
+  kb_id: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  stats: GraphStats;
+};

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from io import BytesIO
 from pathlib import Path
 from datetime import UTC, datetime
@@ -9,13 +10,16 @@ from pypdf import PdfReader
 
 from chunking.structural_chunker import StructuralChunker
 from config import Settings
-from models import DocumentRecord, UploadResponse
+from models import DeleteStoreResult, DocumentRecord, KnowledgeBaseDeleteResult, UploadResponse
 from rag.catalog import MetadataCatalog
+from rag.graph_extractor import GraphExtractor
+from rag.graph_store import GraphStore
 from rag.metadata import build_document_id
 from retrieval.dense_search import DenseRetriever
 from retrieval.sparse_search import SparseRetriever
 
 SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md"}
+logger = logging.getLogger(__name__)
 
 
 class IngestionService:
@@ -26,12 +30,16 @@ class IngestionService:
         dense_retriever: DenseRetriever,
         sparse_retriever: SparseRetriever,
         catalog: MetadataCatalog,
+        graph_extractor: GraphExtractor,
+        graph_store: GraphStore,
     ) -> None:
         self.settings = settings
         self.chunker = chunker
         self.dense_retriever = dense_retriever
         self.sparse_retriever = sparse_retriever
         self.catalog = catalog
+        self.graph_extractor = graph_extractor
+        self.graph_store = graph_store
 
     async def ingest_upload(self, kb_id: str, upload: UploadFile) -> UploadResponse:
         kb = self.catalog.get_kb(kb_id)
@@ -57,6 +65,12 @@ class IngestionService:
 
         self.dense_retriever.upsert(chunks)
         self.sparse_retriever.upsert(chunks)
+        for chunk in chunks:
+            try:
+                entities, relations = self.graph_extractor.extract(chunk)
+                self.graph_store.replace_chunk(chunk, entities, relations)
+            except Exception:
+                continue
         self.catalog.upsert_document(
             DocumentRecord(
                 document_id=document_id,
@@ -84,12 +98,54 @@ class IngestionService:
         deleted = self.catalog.delete_document(kb_id, document_id)
         self.dense_retriever.delete_document(kb_id, document_id)
         self.sparse_retriever.delete_document(kb_id, document_id)
+        self.graph_store.delete_document(kb_id, document_id)
         return deleted
 
-    def delete_kb(self, kb_id: str) -> None:
-        self.catalog.delete_kb(kb_id)
-        self.dense_retriever.delete_kb(kb_id)
-        self.sparse_retriever.delete_kb(kb_id)
+    def delete_kb(self, kb_id: str) -> KnowledgeBaseDeleteResult:
+        stores: list[DeleteStoreResult] = []
+
+        metadata_deleted = self.catalog.delete_kb(kb_id)
+        stores.append(
+            DeleteStoreResult(
+                store="metadata",
+                status="deleted" if metadata_deleted else "already_absent",
+            )
+        )
+
+        for store_name, action in (
+            ("qdrant", self.dense_retriever.delete_kb),
+            ("sparse", self.sparse_retriever.delete_kb),
+            ("graph", self.graph_store.delete_kb),
+        ):
+            try:
+                action(kb_id)
+                stores.append(DeleteStoreResult(store=store_name, status="deleted"))
+            except Exception as error:
+                logger.exception("KB deletion failed in %s store", store_name, extra={"kb_id": kb_id})
+                stores.append(
+                    DeleteStoreResult(
+                        store=store_name,
+                        status="failed",
+                        detail=str(error),
+                    )
+                )
+
+        failed_stores = [item for item in stores if item.status == "failed"]
+        result = KnowledgeBaseDeleteResult(
+            kb_id=kb_id,
+            status="partial_failure" if failed_stores else "ok",
+            stores=stores,
+        )
+        if failed_stores:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "message": "Knowledge base deletion partially failed",
+                    "kb_id": kb_id,
+                    "stores": [item.model_dump() for item in result.stores],
+                },
+            )
+        return result
 
     def _extract_pages(self, extension: str, content: bytes) -> list[tuple[int, str]]:
         if extension == ".pdf":
