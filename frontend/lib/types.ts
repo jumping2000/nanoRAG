@@ -1,5 +1,7 @@
 export type SourceCitation = {
   chunk_id: string;
+  kb_id: string;
+  document_id: string;
   filename: string;
   page?: number | null;
   section?: string | null;
@@ -15,6 +17,7 @@ export type ChatMessage = {
 };
 
 export type UploadSummary = {
+  document_id: string;
   filename: string;
   ingested_chunks: number;
 };
@@ -28,5 +31,18 @@ export type KnowledgeBase = {
   name: string;
   documents: number;
   chunks: number;
-  updatedLabel: string;
+};
+
+export type KnowledgeBasePayload = {
+  id: string;
+  name: string;
+};
+
+export type DocumentSummary = {
+  document_id: string;
+  kb_id: string;
+  kb_name: string;
+  filename: string;
+  chunk_count: number;
+  created_at: string;
 };

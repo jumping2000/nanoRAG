@@ -13,17 +13,19 @@ export function useChatStream() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [lastPrompt, setLastPrompt] = useState("");
+  const [lastKbId, setLastKbId] = useState("");
   const [lastSearchQuery, setLastSearchQuery] = useState("");
   const [lastMatchCount, setLastMatchCount] = useState(0);
 
-  async function sendMessage(message: string) {
+  async function sendMessage(message: string, kbId: string) {
     const trimmed = message.trim();
-    if (!trimmed || isStreaming) {
+    if (!trimmed || !kbId || isStreaming) {
       return;
     }
 
     const assistantId = buildId();
     setLastPrompt(trimmed);
+    setLastKbId(kbId);
     setMessages((current) => [
       ...current,
       { id: buildId(), role: "user", content: trimmed, status: "done" },
@@ -33,7 +35,7 @@ export function useChatStream() {
 
     try {
       await streamChat(
-        { message: trimmed },
+        { message: trimmed, kb_id: kbId },
         {
           onMeta(meta) {
             setLastSearchQuery(meta.searchQuery ?? "");
@@ -89,10 +91,18 @@ export function useChatStream() {
   }
 
   async function retryLast() {
-    if (!lastPrompt || isStreaming) {
+    if (!lastPrompt || !lastKbId || isStreaming) {
       return;
     }
-    await sendMessage(lastPrompt);
+    await sendMessage(lastPrompt, lastKbId);
+  }
+
+  function resetConversation() {
+    setMessages([]);
+    setLastPrompt("");
+    setLastKbId("");
+    setLastSearchQuery("");
+    setLastMatchCount(0);
   }
 
   return {
@@ -103,5 +113,6 @@ export function useChatStream() {
     lastMatchCount,
     sendMessage,
     retryLast,
+    resetConversation,
   };
 }

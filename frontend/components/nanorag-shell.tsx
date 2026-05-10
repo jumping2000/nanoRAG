@@ -9,13 +9,17 @@ import {
   FileText,
   FolderKanban,
   GitBranch,
+  LibraryBig,
   LoaderCircle,
   Network,
   PanelRight,
   Paperclip,
+  Pencil,
+  Plus,
   RefreshCcw,
   SearchCode,
   SendHorizonal,
+  Trash2,
   Upload,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -28,28 +32,29 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { useChatStream } from "@/hooks/use-chat-stream";
-import type { KnowledgeBase, UploadSummary } from "@/lib/types";
+import type { DocumentSummary, KnowledgeBase } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { uploadDocuments } from "@/services/api";
-
-const initialKnowledgeBases: KnowledgeBase[] = [
-  {
-    id: "arch-doc",
-    name: "arch-doc",
-    documents: 0,
-    chunks: 0,
-    updatedLabel: "Ready for ingestion",
-  },
-];
+import {
+  createKnowledgeBase,
+  deleteKnowledgeBase,
+  deleteKnowledgeBaseDocument,
+  listKnowledgeBaseDocuments,
+  listKnowledgeBases,
+  renameKnowledgeBase,
+  uploadDocuments,
+} from "@/services/api";
 
 export function NanoRagShell() {
-  const [knowledgeBases, setKnowledgeBases] = useState(initialKnowledgeBases);
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [activeKnowledgeBase, setActiveKnowledgeBase] = useState<KnowledgeBase | null>(null);
+  const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [composerValue, setComposerValue] = useState("");
-  const [uploadedDocuments, setUploadedDocuments] = useState<UploadSummary[]>([]);
+  const [isLoadingKnowledgeBases, setIsLoadingKnowledgeBases] = useState(true);
+  const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState("");
+  const [kbError, setKbError] = useState("");
   const [sidePanelTab, setSidePanelTab] = useState<"content" | "graph">("content");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -60,9 +65,14 @@ export function NanoRagShell() {
     isStreaming,
     lastMatchCount,
     lastSearchQuery,
+    resetConversation,
     retryLast,
     sendMessage,
   } = useChatStream();
+
+  useEffect(() => {
+    void loadKnowledgeBases();
+  }, []);
 
   useEffect(() => {
     const element = textareaRef.current;
@@ -81,19 +91,28 @@ export function NanoRagShell() {
     container.scrollTop = container.scrollHeight;
   }, [messages]);
 
+  useEffect(() => {
+    if (!activeKnowledgeBase) {
+      setDocuments([]);
+      return;
+    }
+    resetConversation();
+    void loadDocuments(activeKnowledgeBase.id);
+  }, [activeKnowledgeBase?.id]);
+
   async function handleSend() {
-    if (!composerValue.trim()) {
+    if (!composerValue.trim() || !activeKnowledgeBase) {
       return;
     }
 
     const message = composerValue;
     setComposerValue("");
-    await sendMessage(message);
+    await sendMessage(message, activeKnowledgeBase.id);
   }
 
   async function handleUpload(fileList: FileList | File[] | null) {
     const files = Array.from(fileList ?? []);
-    if (!files.length) {
+    if (!files.length || !activeKnowledgeBase) {
       return;
     }
 
@@ -102,22 +121,8 @@ export function NanoRagShell() {
     setUploadProgress(0);
 
     try {
-      const response = await uploadDocuments(files, setUploadProgress);
-      setUploadedDocuments((current) => [...response.uploaded, ...current]);
-      setKnowledgeBases((current) =>
-        current.map((item) =>
-          item.id === (activeKnowledgeBase?.id ?? "arch-doc")
-            ? {
-                ...item,
-                documents: item.documents + response.uploaded.length,
-                chunks:
-                  item.chunks +
-                  response.uploaded.reduce((total, upload) => total + upload.ingested_chunks, 0),
-                updatedLabel: "Recently indexed",
-              }
-            : item,
-        ),
-      );
+      await uploadDocuments(activeKnowledgeBase.id, files, setUploadProgress);
+      await Promise.all([loadKnowledgeBases(activeKnowledgeBase.id), loadDocuments(activeKnowledgeBase.id)]);
       setUploadProgress(100);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Upload failed");
@@ -129,7 +134,110 @@ export function NanoRagShell() {
 
   function onDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
-    handleUpload(event.dataTransfer.files);
+    void handleUpload(event.dataTransfer.files);
+  }
+
+  async function loadKnowledgeBases(preferredKbId?: string) {
+    setKbError("");
+    setIsLoadingKnowledgeBases(true);
+    try {
+      const nextKnowledgeBases = await listKnowledgeBases();
+      setKnowledgeBases(nextKnowledgeBases);
+      setActiveKnowledgeBase((current) => {
+        const nextId = preferredKbId ?? current?.id;
+        if (nextId) {
+          const matched = nextKnowledgeBases.find((item) => item.id === nextId);
+          if (matched) {
+            return matched;
+          }
+        }
+        return current && nextKnowledgeBases.some((item) => item.id === current.id) ? current : null;
+      });
+    } catch (error) {
+      setKbError(error instanceof Error ? error.message : "Unable to load knowledge bases");
+    } finally {
+      setIsLoadingKnowledgeBases(false);
+    }
+  }
+
+  async function loadDocuments(kbId: string) {
+    setIsLoadingDocuments(true);
+    try {
+      setDocuments(await listKnowledgeBaseDocuments(kbId));
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Unable to load documents");
+    } finally {
+      setIsLoadingDocuments(false);
+    }
+  }
+
+  async function handleCreateKb() {
+    const name = window.prompt("Knowledge Base name");
+    if (!name?.trim()) {
+      return;
+    }
+
+    const id = slugifyKnowledgeBaseId(name);
+    try {
+      const kb = await createKnowledgeBase({ id, name: name.trim() });
+      await loadKnowledgeBases(kb.id);
+      setActiveKnowledgeBase(kb);
+    } catch (error) {
+      setKbError(error instanceof Error ? error.message : "Unable to create knowledge base");
+    }
+  }
+
+  async function handleRenameKb(kb: KnowledgeBase) {
+    const name = window.prompt("Rename Knowledge Base", kb.name);
+    if (!name?.trim() || name.trim() === kb.name) {
+      return;
+    }
+
+    try {
+      const updated = await renameKnowledgeBase(kb.id, name.trim());
+      await loadKnowledgeBases(updated.id);
+      setActiveKnowledgeBase(updated);
+    } catch (error) {
+      setKbError(error instanceof Error ? error.message : "Unable to rename knowledge base");
+    }
+  }
+
+  async function handleDeleteKb(kb: KnowledgeBase) {
+    const confirmed = window.confirm(`Delete knowledge base \"${kb.name}\"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deleteKnowledgeBase(kb.id);
+      const nextActive = activeKnowledgeBase?.id === kb.id ? undefined : activeKnowledgeBase?.id;
+      if (activeKnowledgeBase?.id === kb.id) {
+        setActiveKnowledgeBase(null);
+      }
+      await loadKnowledgeBases(nextActive);
+    } catch (error) {
+      setKbError(error instanceof Error ? error.message : "Unable to delete knowledge base");
+    }
+  }
+
+  async function handleDeleteDocument(document: DocumentSummary) {
+    if (!activeKnowledgeBase) {
+      return;
+    }
+    const confirmed = window.confirm(`Delete document \"${document.filename}\"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deleteKnowledgeBaseDocument(activeKnowledgeBase.id, document.document_id);
+      await Promise.all([
+        loadDocuments(activeKnowledgeBase.id),
+        loadKnowledgeBases(activeKnowledgeBase.id),
+      ]);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Unable to delete document");
+    }
   }
 
   if (!activeKnowledgeBase) {
@@ -143,9 +251,19 @@ export function NanoRagShell() {
                 <p className="text-sm uppercase tracking-[0.24em] text-foreground/45">Workspaces</p>
                 <h1 className="mt-2 text-3xl font-semibold tracking-tight">Knowledge bases pronte per l&rsquo;operatività</h1>
               </div>
-              <Badge className="border-primary/20 bg-primary/10 text-primary">Minimal + Hybrid</Badge>
+              <div className="flex items-center gap-2">
+                <Badge className="border-primary/20 bg-primary/10 text-primary">Minimal + Hybrid</Badge>
+                <Button type="button" variant="outline" onClick={() => void handleCreateKb()}>
+                  <Plus className="size-4" />
+                  New KB
+                </Button>
+              </div>
             </div>
+            {kbError ? <p className="mb-4 text-sm text-red-600 dark:text-red-400">{kbError}</p> : null}
             <div className="grid gap-4 md:grid-cols-2">
+              {isLoadingKnowledgeBases ? (
+                <Card className="p-5 text-sm text-foreground/60">Loading knowledge bases...</Card>
+              ) : null}
               {knowledgeBases.map((knowledgeBase) => (
                 <button
                   key={knowledgeBase.id}
@@ -160,7 +278,7 @@ export function NanoRagShell() {
                     <ChevronRight className="size-4 text-foreground/35 transition group-hover:translate-x-1" />
                   </div>
                   <h2 className="mt-5 text-xl font-semibold">{knowledgeBase.name}</h2>
-                  <p className="mt-2 text-sm text-foreground/60">{knowledgeBase.updatedLabel}</p>
+                  <p className="mt-2 text-sm text-foreground/60">Single collection, isolated by metadata filter</p>
                   <div className="mt-6 flex gap-2 text-xs text-foreground/55">
                     <Badge>{knowledgeBase.documents} docs</Badge>
                     <Badge>{knowledgeBase.chunks} chunks</Badge>
@@ -168,6 +286,14 @@ export function NanoRagShell() {
                 </button>
               ))}
             </div>
+            {!isLoadingKnowledgeBases && !knowledgeBases.length ? (
+              <div className="mt-6">
+                <EmptyPanel
+                  title="No knowledge bases yet"
+                  caption="Create the first KB to isolate uploads, retrieval, and chat context."
+                />
+              </div>
+            ) : null}
           </Card>
           <Card className="p-6">
             <p className="text-sm uppercase tracking-[0.24em] text-foreground/45">Architecture</p>
@@ -175,6 +301,7 @@ export function NanoRagShell() {
               <FlowRow icon={<BrainCircuit className="size-4" />} title="Orchestrator Agent" caption="Minimal planning before retrieval" />
               <FlowRow icon={<SearchCode className="size-4" />} title="Hybrid Search" caption="Dense Qdrant + BM25 + RRF" />
               <FlowRow icon={<GitBranch className="size-4" />} title="Knowledge Agent" caption="Reasoning only on retrieved context" />
+              <FlowRow icon={<LibraryBig className="size-4" />} title="Scoped Knowledge Bases" caption="Single Qdrant collection with kb_id filtering" />
               <FlowRow icon={<PanelRight className="size-4" />} title="Streaming UI" caption="Realtime markdown answers with source citations" />
             </div>
           </Card>
@@ -194,7 +321,7 @@ export function NanoRagShell() {
           </div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight">{activeKnowledgeBase.name}</h1>
-            <Badge>{activeKnowledgeBase.documents + uploadedDocuments.length} files</Badge>
+            <Badge>{activeKnowledgeBase.documents} files</Badge>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -204,14 +331,62 @@ export function NanoRagShell() {
         </div>
       </header>
 
-      <section className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_340px]">
+      <section className="grid gap-4 xl:grid-cols-[250px_320px_minmax(0,1fr)_340px]">
+        <Card className="p-4">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Knowledge Bases</p>
+              <p className="text-xs text-foreground/55">Scoped retrieval and isolated context</p>
+            </div>
+            <Button type="button" size="icon" variant="outline" onClick={() => void handleCreateKb()}>
+              <Plus className="size-4" />
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            {knowledgeBases.map((knowledgeBase) => (
+              <div
+                key={knowledgeBase.id}
+                className={cn(
+                  "rounded-2xl border p-3 transition",
+                  activeKnowledgeBase.id === knowledgeBase.id
+                    ? "border-primary/35 bg-primary/10"
+                    : "border-border/80 bg-background/60",
+                )}
+              >
+                <button
+                  type="button"
+                  className="w-full text-left"
+                  onClick={() => setActiveKnowledgeBase(knowledgeBase)}
+                >
+                  <p className="text-sm font-medium">{knowledgeBase.name}</p>
+                  <p className="mt-1 text-xs text-foreground/55">
+                    {knowledgeBase.documents} docs · {knowledgeBase.chunks} chunks
+                  </p>
+                </button>
+                <div className="mt-3 flex gap-2">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => void handleRenameKb(knowledgeBase)}>
+                    <Pencil className="size-4" />
+                    Rename
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => void handleDeleteKb(knowledgeBase)}>
+                    <Trash2 className="size-4" />
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {kbError ? <p className="mt-3 text-xs text-red-600 dark:text-red-400">{kbError}</p> : null}
+        </Card>
+
         <Card className="p-4">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <p className="text-sm font-medium">Documents</p>
-              <p className="text-xs text-foreground/55">Upload PDF, TXT, MD</p>
+              <p className="text-xs text-foreground/55">Upload PDF, TXT, MD into the active KB</p>
             </div>
-            <Badge>{uploadedDocuments.length}</Badge>
+            <Badge>{documents.length}</Badge>
           </div>
           <div
             onDragOver={(event) => event.preventDefault()}
@@ -246,10 +421,13 @@ export function NanoRagShell() {
           </div>
 
           <div className="mt-5 space-y-3">
-            {uploadedDocuments.length ? (
-              uploadedDocuments.map((document) => (
+            {isLoadingDocuments ? (
+              <Card className="p-4 text-sm text-foreground/60">Loading documents...</Card>
+            ) : null}
+            {documents.length ? (
+              documents.map((document) => (
                 <div
-                  key={`${document.filename}-${document.ingested_chunks}`}
+                  key={document.document_id}
                   className="rounded-2xl border border-border/80 bg-background/65 p-3"
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -259,10 +437,12 @@ export function NanoRagShell() {
                       </div>
                       <div>
                         <p className="line-clamp-2 text-sm font-medium">{document.filename}</p>
-                        <p className="mt-1 text-xs text-foreground/55">{document.ingested_chunks} indexed chunks</p>
+                        <p className="mt-1 text-xs text-foreground/55">{document.chunk_count} indexed chunks</p>
                       </div>
                     </div>
-                    <Badge className="text-[11px]">indexed</Badge>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => void handleDeleteDocument(document)}>
+                      <Trash2 className="size-4" />
+                    </Button>
                   </div>
                 </div>
               ))
@@ -438,7 +618,7 @@ export function NanoRagShell() {
               />
               <InsightCard
                 icon={<Database className="size-4" />}
-                title="Indexed chunks"
+                title="Active KB chunks"
                 value={String(
                   knowledgeBases.find((item) => item.id === activeKnowledgeBase.id)?.chunks ?? 0,
                 )}
@@ -447,6 +627,11 @@ export function NanoRagShell() {
                 icon={<GitBranch className="size-4" />}
                 title="Fusion mode"
                 value="Dense + BM25 via RRF"
+              />
+              <InsightCard
+                icon={<LibraryBig className="size-4" />}
+                title="Storage policy"
+                value="Chunks and metadata only. Raw source files are not retained after processing."
               />
             </div>
           ) : (
@@ -523,4 +708,13 @@ function InsightCard({ icon, title, value }: { icon: React.ReactNode; title: str
       <p className="mt-3 text-sm font-medium leading-6 text-foreground/85">{value}</p>
     </div>
   );
+}
+
+function slugifyKnowledgeBaseId(name: string) {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
 }

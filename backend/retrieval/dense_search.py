@@ -3,7 +3,7 @@ from __future__ import annotations
 from qdrant_client.http import models
 
 from config import Settings
-from db.qdrant import create_qdrant_client, ensure_collection
+from db.qdrant import build_payload_filter, create_qdrant_client, delete_points_by_filter, ensure_collection
 from models import ChunkMetadata, RetrievedChunk
 from providers.embedding_provider import EmbeddingProvider
 from rag.embeddings import embed_chunks
@@ -44,7 +44,7 @@ class DenseRetriever:
             points=points,
         )
 
-    def search(self, query: str, top_k: int) -> list[RetrievedChunk]:
+    def search(self, query: str, kb_id: str, top_k: int) -> list[RetrievedChunk]:
         if not query.strip() or not self._collection_exists():
             return []
 
@@ -52,6 +52,7 @@ class DenseRetriever:
         hits = self.client.search(
             collection_name=self.settings.qdrant_collection,
             query_vector=query_vector,
+            query_filter=build_payload_filter(kb_id=kb_id),
             limit=top_k,
             with_payload=True,
         )
@@ -71,3 +72,21 @@ class DenseRetriever:
             return True
         except Exception:
             return False
+
+    def delete_document(self, kb_id: str, document_id: str) -> None:
+        if not self._collection_exists():
+            return
+        delete_points_by_filter(
+            client=self.client,
+            collection_name=self.settings.qdrant_collection,
+            query_filter=build_payload_filter(kb_id=kb_id, document_id=document_id),
+        )
+
+    def delete_kb(self, kb_id: str) -> None:
+        if not self._collection_exists():
+            return
+        delete_points_by_filter(
+            client=self.client,
+            collection_name=self.settings.qdrant_collection,
+            query_filter=build_payload_filter(kb_id=kb_id),
+        )

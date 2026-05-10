@@ -36,6 +36,8 @@ class Settings:
     data_dir: Path
     uploads_dir: Path
     chunks_store_path: Path
+    knowledge_bases_store_path: Path
+    documents_store_path: Path
     prompt_path: Path
 
 
@@ -84,5 +86,7 @@ def get_settings() -> Settings:
         data_dir=data_dir,
         uploads_dir=uploads_dir,
         chunks_store_path=data_dir / "chunks.jsonl",
+        knowledge_bases_store_path=data_dir / "knowledge_bases.json",
+        documents_store_path=data_dir / "documents.json",
         prompt_path=BASE_DIR / "prompts" / "system.md",
     )

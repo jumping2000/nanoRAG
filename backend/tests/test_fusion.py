@@ -6,6 +6,9 @@ from retrieval.fusion import reciprocal_rank_fusion
 def _chunk(chunk_id: str, score: float) -> RetrievedChunk:
     return RetrievedChunk(
         chunk_id=chunk_id,
+        kb_id="architecture",
+        kb_name="Architecture",
+        document_id="architecture-doc-123",
         source="test",
         filename="doc.md",
         page=1,

@@ -18,13 +18,13 @@ class HybridRetriever:
         self.dense_retriever = dense_retriever
         self.sparse_retriever = sparse_retriever
 
-    def search(self, query: str, top_k: int | None = None) -> list[RetrievedChunk]:
+    def search(self, query: str, kb_id: str, top_k: int | None = None) -> list[RetrievedChunk]:
         limit = top_k or self.settings.retrieval_top_k
 
         try:
-            dense_results = self.dense_retriever.search(query, top_k=limit * 2)
+            dense_results = self.dense_retriever.search(query, kb_id=kb_id, top_k=limit * 2)
         except Exception:
             dense_results = []
 
-        sparse_results = self.sparse_retriever.search(query, top_k=limit * 2)
+        sparse_results = self.sparse_retriever.search(query, kb_id=kb_id, top_k=limit * 2)
         return reciprocal_rank_fusion([dense_results, sparse_results], limit=limit)

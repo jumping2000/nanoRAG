@@ -20,6 +20,9 @@ class StructuralChunker:
 
     def chunk_document(
         self,
+        kb_id: str,
+        kb_name: str,
+        document_id: str,
         filename: str,
         source: str,
         pages: Iterable[tuple[int, str]],
@@ -37,6 +40,9 @@ class StructuralChunker:
             for block in self._split_blocks(text):
                 if self._looks_like_heading(block):
                     ordinal = self._flush_section(
+                        kb_id=kb_id,
+                        kb_name=kb_name,
+                        document_id=document_id,
                         filename=filename,
                         source=source,
                         page=page_number,
@@ -51,6 +57,9 @@ class StructuralChunker:
                 section_buffer.append(block)
 
             ordinal = self._flush_section(
+                kb_id=kb_id,
+                kb_name=kb_name,
+                document_id=document_id,
                 filename=filename,
                 source=source,
                 page=page_number,
@@ -72,6 +81,9 @@ class StructuralChunker:
 
     def _flush_section(
         self,
+        kb_id: str,
+        kb_name: str,
+        document_id: str,
         filename: str,
         source: str,
         page: int,
@@ -91,6 +103,9 @@ class StructuralChunker:
             candidate = "\n\n".join([*buffer, paragraph])
             if buffer and self.count_tokens(candidate) > self.max_tokens:
                 ordinal = self._append_chunk(
+                    kb_id=kb_id,
+                    kb_name=kb_name,
+                    document_id=document_id,
                     filename=filename,
                     source=source,
                     page=page,
@@ -106,6 +121,9 @@ class StructuralChunker:
 
         if buffer:
             ordinal = self._append_chunk(
+                kb_id=kb_id,
+                kb_name=kb_name,
+                document_id=document_id,
                 filename=filename,
                 source=source,
                 page=page,
@@ -119,6 +137,9 @@ class StructuralChunker:
 
     def _append_chunk(
         self,
+        kb_id: str,
+        kb_name: str,
+        document_id: str,
         filename: str,
         source: str,
         page: int,
@@ -132,7 +153,18 @@ class StructuralChunker:
             return ordinal
 
         chunk = ChunkMetadata(
-            chunk_id=build_chunk_id(filename, page, section, ordinal, clean_text),
+            chunk_id=build_chunk_id(
+                kb_id=kb_id,
+                document_id=document_id,
+                filename=filename,
+                page=page,
+                section=section,
+                ordinal=ordinal,
+                text=clean_text,
+            ),
+            kb_id=kb_id,
+            kb_name=kb_name,
+            document_id=document_id,
             source=source,
             filename=filename,
             page=page,

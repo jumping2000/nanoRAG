@@ -1,10 +1,16 @@
-import type { SourceCitation, UploadResponse } from "@/lib/types";
+import type {
+  DocumentSummary,
+  KnowledgeBase,
+  KnowledgeBasePayload,
+  SourceCitation,
+  UploadResponse,
+} from "@/lib/types";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
 
 export async function streamChat(
-  body: { message: string; top_k?: number },
+  body: { message: string; kb_id: string; top_k?: number },
   handlers: {
     onMeta?: (meta: { searchQuery?: string; matches?: number }) => void;
     onToken?: (token: string) => void;
@@ -71,6 +77,7 @@ export async function streamChat(
 }
 
 export function uploadDocuments(
+  kbId: string,
   files: File[],
   onProgress?: (progress: number) => void,
 ): Promise<UploadResponse> {
@@ -81,7 +88,7 @@ export function uploadDocuments(
     }
 
     const request = new XMLHttpRequest();
-    request.open("POST", `${API_BASE_URL}/upload`);
+  request.open("POST", `${API_BASE_URL}/kb/${encodeURIComponent(kbId)}/upload`);
     request.responseType = "json";
 
     request.upload.onprogress = (event) => {
@@ -102,4 +109,74 @@ export function uploadDocuments(
     request.onerror = () => reject(new Error("Upload failed"));
     request.send(formData);
   });
+}
+
+export async function listKnowledgeBases(): Promise<KnowledgeBase[]> {
+  const response = await fetch(`${API_BASE_URL}/kb`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`KB list request failed with status ${response.status}`);
+  }
+  return (await response.json()) as KnowledgeBase[];
+}
+
+export async function createKnowledgeBase(payload: KnowledgeBasePayload): Promise<KnowledgeBase> {
+  const response = await fetch(`${API_BASE_URL}/kb`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error(`KB creation failed with status ${response.status}`);
+  }
+  return (await response.json()) as KnowledgeBase;
+}
+
+export async function renameKnowledgeBase(kbId: string, name: string): Promise<KnowledgeBase> {
+  const response = await fetch(`${API_BASE_URL}/kb/${encodeURIComponent(kbId)}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) {
+    throw new Error(`KB rename failed with status ${response.status}`);
+  }
+  return (await response.json()) as KnowledgeBase;
+}
+
+export async function deleteKnowledgeBase(kbId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/kb/${encodeURIComponent(kbId)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw new Error(`KB delete failed with status ${response.status}`);
+  }
+}
+
+export async function listKnowledgeBaseDocuments(kbId: string): Promise<DocumentSummary[]> {
+  const response = await fetch(`${API_BASE_URL}/kb/${encodeURIComponent(kbId)}/documents`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Document list failed with status ${response.status}`);
+  }
+  return (await response.json()) as DocumentSummary[];
+}
+
+export async function deleteKnowledgeBaseDocument(
+  kbId: string,
+  documentId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/kb/${encodeURIComponent(kbId)}/documents/${encodeURIComponent(documentId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Document delete failed with status ${response.status}`);
+  }
 }

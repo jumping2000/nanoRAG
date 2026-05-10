@@ -11,8 +11,16 @@ from agents.knowledge_agent import KnowledgeAgent
 from agents.orchestrator import OrchestratorAgent
 from chunking.structural_chunker import StructuralChunker
 from config import get_settings
-from models import ChatRequest, HealthResponse, SourceCitation
+from models import (
+    ChatRequest,
+    DeleteResponse,
+    HealthResponse,
+    KnowledgeBaseCreateRequest,
+    KnowledgeBaseUpdateRequest,
+    SourceCitation,
+)
 from providers.embedding_provider import EmbeddingProvider
+from rag.catalog import MetadataCatalog
 from rag.ingest import IngestionService
 from retrieval.dense_search import DenseRetriever
 from retrieval.hybrid_search import HybridRetriever
@@ -24,7 +32,8 @@ dense_retriever = DenseRetriever(settings, embedding_provider)
 sparse_retriever = SparseRetriever(settings)
 hybrid_retriever = HybridRetriever(settings, dense_retriever, sparse_retriever)
 chunker = StructuralChunker(settings.chunk_size_tokens, settings.chunk_overlap_tokens)
-ingestion_service = IngestionService(settings, chunker, dense_retriever, sparse_retriever)
+catalog = MetadataCatalog(settings)
+ingestion_service = IngestionService(settings, chunker, dense_retriever, sparse_retriever, catalog)
 orchestrator = OrchestratorAgent(settings)
 knowledge_agent = KnowledgeAgent(settings)
 
@@ -48,19 +57,56 @@ def health() -> HealthResponse:
     )
 
 
-@app.post("/upload")
-async def upload(files: list[UploadFile] = File(...)) -> dict[str, object]:
-    uploaded = [await ingestion_service.ingest_upload(file) for file in files]
+@app.post("/kb")
+def create_kb(request: KnowledgeBaseCreateRequest) -> dict[str, object]:
+    kb = catalog.create_kb(kb_id=request.id, name=request.name)
+    return kb.model_dump()
+
+
+@app.get("/kb")
+def list_kbs() -> list[dict[str, object]]:
+    return [kb.model_dump() for kb in catalog.list_kbs()]
+
+
+@app.patch("/kb/{kb_id}")
+def rename_kb(kb_id: str, request: KnowledgeBaseUpdateRequest) -> dict[str, object]:
+    kb = catalog.rename_kb(kb_id, request.name)
+    return kb.model_dump()
+
+
+@app.delete("/kb/{kb_id}", response_model=DeleteResponse)
+def delete_kb(kb_id: str) -> DeleteResponse:
+    ingestion_service.delete_kb(kb_id)
+    return DeleteResponse()
+
+
+@app.post("/kb/{kb_id}/upload")
+async def upload(kb_id: str, files: list[UploadFile] = File(...)) -> dict[str, object]:
+    uploaded = [await ingestion_service.ingest_upload(kb_id, file) for file in files]
     return {"uploaded": [item.model_dump() for item in uploaded]}
+
+
+@app.get("/kb/{kb_id}/documents")
+def list_documents(kb_id: str) -> list[dict[str, object]]:
+    return [document.model_dump() for document in ingestion_service.list_documents(kb_id)]
+
+
+@app.delete("/kb/{kb_id}/documents/{document_id}", response_model=DeleteResponse)
+def delete_document(kb_id: str, document_id: str) -> DeleteResponse:
+    ingestion_service.delete_document(kb_id, document_id)
+    return DeleteResponse()
 
 
 @app.post("/chat")
 def chat(request: ChatRequest) -> StreamingResponse:
+    catalog.get_kb(request.kb_id)
     plan = orchestrator.plan(request.message)
-    chunks = hybrid_retriever.search(plan.search_query, request.top_k)
+    chunks = hybrid_retriever.search(plan.search_query, kb_id=request.kb_id, top_k=request.top_k)
     sources = [
         SourceCitation(
             chunk_id=chunk.chunk_id,
+            kb_id=chunk.kb_id,
+            document_id=chunk.document_id,
             filename=chunk.filename,
             page=chunk.page,
             section=chunk.section,

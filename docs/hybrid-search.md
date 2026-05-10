@@ -2,12 +2,15 @@
 
 nanoRAG combines dense retrieval and sparse BM25 retrieval, then merges both rankings with Reciprocal Rank Fusion.
 
+Each query is scoped to the active knowledge base through `kb_id` filtering.
+
 ## Dense retrieval
 
 Dense retrieval is responsible for semantic matching.
 
 - provider-agnostic embeddings
-- vectors stored in Qdrant
+- vectors stored in one shared Qdrant collection
+- retrieval filtered by payload field `kb_id`
 - cosine similarity search
 
 This path is useful for paraphrases and concept-level similarity.
@@ -18,6 +21,7 @@ Sparse retrieval is local and in-process.
 
 - implemented with `rank-bm25`
 - tokenization keeps technical terms, acronyms, paths and codes
+- corpus partitioned in-memory by `kb_id`
 - ideal for exact matches and domain jargon
 
 This path is especially useful for:
@@ -50,3 +54,4 @@ Where:
 - predictable CPU usage
 - low implementation complexity
 - easy to debug and extend
+- future-compatible with global multi-KB search without changing the collection layout
