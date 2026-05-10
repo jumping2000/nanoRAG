@@ -1,0 +1,13 @@
+backend/.venv/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/__pycache__/
+backend/**/*.pyc
+backend/data/uploads/
+backend/data/chunks.jsonl
+frontend/node_modules/
+frontend/.next/
+.env
+AGENTS.md
+prompt.txt

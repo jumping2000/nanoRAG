@@ -1,0 +1,23 @@
+from chunking.structural_chunker import StructuralChunker
+
+
+def test_structural_chunker_keeps_section_metadata() -> None:
+    chunker = StructuralChunker(max_tokens=40, overlap_tokens=10)
+    pages = [
+        (
+            1,
+            "# Overview\n\nThis is the first paragraph.\n\n"
+            "## Details\n\nThis section contains more detailed technical content.",
+        )
+    ]
+
+    chunks = chunker.chunk_document(
+        filename="sample.md",
+        source="sample.md",
+        pages=pages,
+    )
+
+    assert len(chunks) >= 2
+    assert chunks[0].section == "Overview"
+    assert any(chunk.section == "Details" for chunk in chunks)
+    assert all(chunk.token_count > 0 for chunk in chunks)
