@@ -22,7 +22,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 
 import { ChatMarkdown } from "@/components/chat-markdown";
 import { KnowledgeGraphPanel } from "@/components/knowledge-graph-panel";
@@ -49,6 +49,7 @@ export function NanoRagShell() {
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [activeKnowledgeBase, setActiveKnowledgeBase] = useState<KnowledgeBase | null>(null);
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
+  const [documentFilter, setDocumentFilter] = useState("");
   const [composerValue, setComposerValue] = useState("");
   const [isLoadingKnowledgeBases, setIsLoadingKnowledgeBases] = useState(true);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
@@ -70,6 +71,10 @@ export function NanoRagShell() {
     retryLast,
     sendMessage,
   } = useChatStream();
+  const deferredDocumentFilter = useDeferredValue(documentFilter.trim().toLowerCase());
+  const filteredDocuments = deferredDocumentFilter
+    ? documents.filter((document) => document.filename.toLowerCase().includes(deferredDocumentFilter))
+    : documents;
 
   useEffect(() => {
     void loadKnowledgeBases();
@@ -95,8 +100,10 @@ export function NanoRagShell() {
   useEffect(() => {
     if (!activeKnowledgeBase) {
       setDocuments([]);
+      setDocumentFilter("");
       return;
     }
+    setDocumentFilter("");
     resetConversation();
     void loadDocuments(activeKnowledgeBase.id);
   }, [activeKnowledgeBase?.id]);
@@ -326,13 +333,16 @@ export function NanoRagShell() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Badge className="border-primary/20 bg-primary/10 text-primary">hybrid search</Badge>
-          <Badge>Agno</Badge>
+          <Button type="button" variant="outline" onClick={() => setActiveKnowledgeBase(null)}>
+            <ChevronRight className="size-4 rotate-180" />
+            Back to Workspaces
+          </Button>
           <ThemeToggle />
         </div>
       </header>
 
-      <section className="grid gap-4 xl:grid-cols-[250px_320px_minmax(0,1fr)_340px]">
+      <section className="grid items-start gap-4 xl:grid-cols-[340px_minmax(0,1fr)_minmax(380px,28vw)]">
+        <div className="space-y-4">
         <Card className="p-4">
           <div className="mb-4 flex items-center justify-between">
             <div>
@@ -421,12 +431,28 @@ export function NanoRagShell() {
             {uploadError ? <p className="mt-3 text-xs text-red-600 dark:text-red-400">{uploadError}</p> : null}
           </div>
 
-          <div className="mt-5 space-y-3">
+          {documents.length ? (
+            <div className="mt-5 flex items-center gap-2 rounded-2xl border border-border/80 bg-background/65 px-3 py-2">
+              <SearchCode className="size-4 shrink-0 text-foreground/45" />
+              <input
+                value={documentFilter}
+                onChange={(event) => setDocumentFilter(event.target.value)}
+                placeholder="Filter documents"
+                className="w-full bg-transparent text-sm outline-none placeholder:text-foreground/35"
+              />
+              <span className="text-xs text-foreground/45">
+                {filteredDocuments.length}/{documents.length}
+              </span>
+            </div>
+          ) : null}
+
+          <div className="mt-5 max-h-[28rem] space-y-3 overflow-y-auto pr-1">
             {isLoadingDocuments ? (
               <Card className="p-4 text-sm text-foreground/60">Loading documents...</Card>
             ) : null}
             {documents.length ? (
-              documents.map((document) => (
+              filteredDocuments.length ? (
+              filteredDocuments.map((document) => (
                 <div
                   key={document.document_id}
                   className="rounded-2xl border border-border/80 bg-background/65 p-3"
@@ -447,6 +473,12 @@ export function NanoRagShell() {
                   </div>
                 </div>
               ))
+              ) : (
+                <EmptyPanel
+                  title="No matching documents"
+                  caption="Try a different filename keyword or clear the current filter."
+                />
+              )
             ) : (
               <EmptyPanel
                 title="No uploaded documents"
@@ -455,6 +487,7 @@ export function NanoRagShell() {
             )}
           </div>
         </Card>
+        </div>
 
         <Card className="flex min-h-[72vh] flex-col overflow-hidden">
           <div className="flex items-center justify-between border-b border-border/70 px-5 py-4">

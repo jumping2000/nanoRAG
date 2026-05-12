@@ -4,13 +4,16 @@ backend/.mypy_cache/
 backend/.ruff_cache/
 backend/__pycache__/
 backend/**/*.pyc
+backend/data/
 backend/data/uploads/
 backend/data/chunks.jsonl
 backend/data/documents.json
 backend/data/knowledge_graph.db
 frontend/node_modules/
 frontend/.next/
+.venv/
 .env
 AGENTS.md
 prompt.txt
 graph_evolution.md
+graph_augmented_agentic_rag_plan.md
