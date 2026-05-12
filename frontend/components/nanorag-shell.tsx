@@ -260,7 +260,6 @@ export function NanoRagShell() {
                 <h1 className="mt-2 text-3xl font-semibold tracking-tight">Knowledge bases pronte per l&rsquo;operatività</h1>
               </div>
               <div className="flex items-center gap-2">
-                <Badge className="border-primary/20 bg-primary/10 text-primary">Minimal + Hybrid</Badge>
                 <Button type="button" variant="outline" onClick={() => void handleCreateKb()}>
                   <Plus className="size-4" />
                   New KB
@@ -685,13 +684,9 @@ function HeroHeader() {
           <ArrowUp className="size-4" />
           Agentic RAG platform
         </div>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight">Minimal orchestration, hybrid retrieval, realtime UX.</h1>
+        <h1 className="mt-3 text-4xl font-semibold tracking-tight">nanoRAG</h1>
       </div>
       <div className="flex items-center gap-2">
-        <Badge className="border-primary/20 bg-primary/10 text-primary">FastAPI</Badge>
-        <Badge>Next.js</Badge>
-        <Badge>Qdrant</Badge>
-        <Badge>BM25</Badge>
         <ThemeToggle />
       </div>
     </header>
