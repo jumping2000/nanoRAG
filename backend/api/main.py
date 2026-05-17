@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from agents.knowledge_agent import KnowledgeAgent
 from agents.orchestrator import OrchestratorAgent
-from chunking.structural_chunker import StructuralChunker
+from bootstrap import build_ingestion_runtime
 from config import get_settings
 from models import (
     ChatRequest,
@@ -23,14 +23,7 @@ from models import (
     KnowledgeBaseUpdateRequest,
     SourceCitation,
 )
-from providers.embedding_provider import EmbeddingProvider
-from rag.catalog import MetadataCatalog
-from rag.graph_extractor import GraphExtractor
-from rag.graph_store import GraphStore
-from rag.ingest import IngestionService
-from retrieval.dense_search import DenseRetriever
 from retrieval.hybrid_search import HybridRetriever
-from retrieval.sparse_search import SparseRetriever
 from observability import (
     bind_request_context,
     clear_request_context,
@@ -45,23 +38,13 @@ from observability import (
 settings = get_settings()
 configure_logging(settings)
 logger = logging.getLogger(__name__)
-embedding_provider = EmbeddingProvider(settings)
-dense_retriever = DenseRetriever(settings, embedding_provider)
-sparse_retriever = SparseRetriever(settings)
+runtime = build_ingestion_runtime(settings)
+dense_retriever = runtime.dense_retriever
+sparse_retriever = runtime.sparse_retriever
 hybrid_retriever = HybridRetriever(settings, dense_retriever, sparse_retriever)
-chunker = StructuralChunker(settings.chunk_size_tokens, settings.chunk_overlap_tokens)
-catalog = MetadataCatalog(settings)
-graph_extractor = GraphExtractor()
-graph_store = GraphStore(settings)
-ingestion_service = IngestionService(
-    settings,
-    chunker,
-    dense_retriever,
-    sparse_retriever,
-    catalog,
-    graph_extractor,
-    graph_store,
-)
+catalog = runtime.catalog
+graph_store = runtime.graph_store
+ingestion_service = runtime.ingestion_service
 orchestrator = OrchestratorAgent(settings)
 knowledge_agent = KnowledgeAgent(settings)
 

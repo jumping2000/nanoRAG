@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { GraphEdge, GraphNode, GraphSnapshot } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 import { getKnowledgeGraph } from "@/services/api";
 
 type KnowledgeGraphPanelProps = {
@@ -53,7 +53,7 @@ export function KnowledgeGraphPanel({ kbId }: KnowledgeGraphPanelProps) {
         return nextSnapshot.nodes[0]?.id ?? "";
       });
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to load graph");
+      setError(getErrorMessage(nextError, "Unable to load graph"));
       setSnapshot(null);
       setSelectedNodeId("");
     } finally {

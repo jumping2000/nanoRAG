@@ -7,7 +7,13 @@ from types import SimpleNamespace
 from qdrant_client.http import models
 
 from config import Settings
-from db.qdrant import build_payload_filter, create_qdrant_client, delete_points_by_filter, ensure_collection
+from db.qdrant import (
+    build_payload_filter,
+    collection_exists,
+    create_qdrant_client,
+    delete_points_by_filter,
+    ensure_collection,
+)
 from models import ChunkMetadata, RetrievedChunk
 from observability import observe
 from providers.embedding_provider import EmbeddingProvider
@@ -69,7 +75,7 @@ class DenseRetriever:
         if not query.strip():
             observe(logger, logging.DEBUG, "dense", "search.skipped", kb_id=kb_id, reason="empty_query")
             return []
-        if not self._collection_exists():
+        if not collection_exists(self.client, self.settings.qdrant_collection):
             observe(logger, logging.DEBUG, "dense", "search.skipped", kb_id=kb_id, reason="missing_collection")
             return []
 
@@ -117,15 +123,8 @@ class DenseRetriever:
         )
         return list(getattr(response, "points", []))
 
-    def _collection_exists(self) -> bool:
-        try:
-            self.client.get_collection(self.settings.qdrant_collection)
-            return True
-        except Exception:
-            return False
-
     def delete_document(self, kb_id: str, document_id: str) -> None:
-        if not self._collection_exists():
+        if not collection_exists(self.client, self.settings.qdrant_collection):
             return
         delete_points_by_filter(
             client=self.client,
@@ -135,7 +134,7 @@ class DenseRetriever:
         observe(logger, logging.DEBUG, "dense", "document.deleted", kb_id=kb_id, document_id=document_id)
 
     def delete_kb(self, kb_id: str) -> None:
-        if not self._collection_exists():
+        if not collection_exists(self.client, self.settings.qdrant_collection):
             return
         delete_points_by_filter(
             client=self.client,

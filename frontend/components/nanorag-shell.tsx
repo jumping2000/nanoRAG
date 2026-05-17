@@ -34,7 +34,7 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import type { DocumentSummary, KnowledgeBase } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 import {
   createKnowledgeBase,
   deleteKnowledgeBase,
@@ -133,7 +133,7 @@ export function NanoRagShell() {
       await Promise.all([loadKnowledgeBases(activeKnowledgeBase.id), loadDocuments(activeKnowledgeBase.id)]);
       setUploadProgress(100);
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : "Upload failed");
+      setUploadError(getErrorMessage(error, "Upload failed"));
     } finally {
       setIsUploading(false);
       window.setTimeout(() => setUploadProgress(0), 500);
@@ -162,7 +162,7 @@ export function NanoRagShell() {
         return current && nextKnowledgeBases.some((item) => item.id === current.id) ? current : null;
       });
     } catch (error) {
-      setKbError(error instanceof Error ? error.message : "Unable to load knowledge bases");
+      setKbError(getErrorMessage(error, "Unable to load knowledge bases"));
     } finally {
       setIsLoadingKnowledgeBases(false);
     }
@@ -173,7 +173,7 @@ export function NanoRagShell() {
     try {
       setDocuments(await listKnowledgeBaseDocuments(kbId));
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : "Unable to load documents");
+      setUploadError(getErrorMessage(error, "Unable to load documents"));
     } finally {
       setIsLoadingDocuments(false);
     }
@@ -191,7 +191,7 @@ export function NanoRagShell() {
       await loadKnowledgeBases(kb.id);
       setActiveKnowledgeBase(kb);
     } catch (error) {
-      setKbError(error instanceof Error ? error.message : "Unable to create knowledge base");
+      setKbError(getErrorMessage(error, "Unable to create knowledge base"));
     }
   }
 
@@ -206,7 +206,7 @@ export function NanoRagShell() {
       await loadKnowledgeBases(updated.id);
       setActiveKnowledgeBase(updated);
     } catch (error) {
-      setKbError(error instanceof Error ? error.message : "Unable to rename knowledge base");
+      setKbError(getErrorMessage(error, "Unable to rename knowledge base"));
     }
   }
 
@@ -224,7 +224,7 @@ export function NanoRagShell() {
       }
       await loadKnowledgeBases(nextActive);
     } catch (error) {
-      setKbError(error instanceof Error ? error.message : "Unable to delete knowledge base");
+      setKbError(getErrorMessage(error, "Unable to delete knowledge base"));
     }
   }
 
@@ -244,7 +244,7 @@ export function NanoRagShell() {
         loadKnowledgeBases(activeKnowledgeBase.id),
       ]);
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : "Unable to delete document");
+      setUploadError(getErrorMessage(error, "Unable to delete document"));
     }
   }
 

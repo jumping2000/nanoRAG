@@ -8,6 +8,7 @@ backend/data/
 backend/data/uploads/
 backend/data/chunks.jsonl
 backend/data/documents.json
+backend/data/knowledge_bases.json
 backend/data/knowledge_graph.db
 frontend/node_modules/
 frontend/.next/

@@ -25,7 +25,6 @@ def test_settings_normalize_supported_app_env_values(
     trace_details: bool,
 ) -> None:
     monkeypatch.setenv("APP_ENV", raw_env)
-    get_settings.cache_clear()
 
     settings = get_settings()
 
@@ -33,17 +32,12 @@ def test_settings_normalize_supported_app_env_values(
     assert settings.enable_deep_observability is deep_observability
     assert settings.enable_trace_details is trace_details
 
-    get_settings.cache_clear()
-
 
 def test_settings_reject_invalid_app_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("APP_ENV", "staging")
-    get_settings.cache_clear()
 
     with pytest.raises(ValueError, match="APP_ENV must be one of"):
         get_settings()
-
-    get_settings.cache_clear()
 
 
 def test_catalog_tracks_kb_and_documents(tmp_path: Path) -> None:

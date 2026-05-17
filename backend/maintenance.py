@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from chunking.structural_chunker import StructuralChunker
+from bootstrap import build_ingestion_runtime
 from config import Settings
 from db.qdrant import (
     create_qdrant_client,
@@ -16,12 +16,7 @@ from db.qdrant import (
 )
 from models import DocumentRecord, KnowledgeBaseDeleteResult
 from observability import observe
-from providers.embedding_provider import EmbeddingProvider
 from rag.catalog import MetadataCatalog
-from rag.graph_extractor import GraphExtractor
-from rag.graph_store import GraphStore
-from rag.ingest import IngestionService
-from retrieval.dense_search import DenseRetriever
 from retrieval.sparse_search import SparseRetriever
 
 logger = logging.getLogger(__name__)
@@ -42,7 +37,7 @@ class ResetAllSummary:
 
 
 def delete_kb_totally(settings: Settings, kb_id: str) -> KnowledgeBaseDeleteResult:
-    service = _build_ingestion_service(settings)
+    service = build_ingestion_runtime(settings).ingestion_service
     result = service.delete_kb(kb_id)
     observe(logger, logging.INFO, "maintenance", "kb.deleted", kb_id=kb_id)
     return result
@@ -139,22 +134,3 @@ def _clear_uploads(uploads_dir: Path) -> int:
             child.unlink()
         deleted += 1
     return deleted
-
-
-def _build_ingestion_service(settings: Settings) -> IngestionService:
-    embedding_provider = EmbeddingProvider(settings)
-    dense_retriever = DenseRetriever(settings, embedding_provider)
-    sparse_retriever = SparseRetriever(settings)
-    chunker = StructuralChunker(settings.chunk_size_tokens, settings.chunk_overlap_tokens)
-    catalog = MetadataCatalog(settings)
-    graph_extractor = GraphExtractor()
-    graph_store = GraphStore(settings)
-    return IngestionService(
-        settings,
-        chunker,
-        dense_retriever,
-        sparse_retriever,
-        catalog,
-        graph_extractor,
-        graph_store,
-    )

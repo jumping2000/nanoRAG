@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { getErrorMessage } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/types";
 import { streamChat } from "@/services/api";
 
@@ -71,8 +72,7 @@ export function useChatStream() {
         },
       );
     } catch (error) {
-      const messageText =
-        error instanceof Error ? error.message : "Streaming request failed";
+      const messageText = getErrorMessage(error, "Streaming request failed");
       setMessages((current) =>
         current.map((item) =>
           item.id === assistantId
@@ -108,7 +108,6 @@ export function useChatStream() {
   return {
     messages,
     isStreaming,
-    lastPrompt,
     lastSearchQuery,
     lastMatchCount,
     sendMessage,
