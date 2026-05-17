@@ -40,6 +40,59 @@ def test_settings_reject_invalid_app_env(monkeypatch: pytest.MonkeyPatch) -> Non
         get_settings()
 
 
+def test_graph_extraction_settings_apply_explicit_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GRAPH_EXTRACTION_ENABLED", "true")
+    monkeypatch.setenv("GRAPH_EXTRACTION_PROVIDER", "ollama")
+    monkeypatch.setenv("GRAPH_EXTRACTION_API_KEY", "graph-key")
+    monkeypatch.setenv("GRAPH_EXTRACTION_BASE_URL", "https://graph.example/v1")
+    monkeypatch.setenv("GRAPH_EXTRACTION_MODEL", "graph-model")
+    monkeypatch.setenv("GRAPH_EXTRACTION_MAX_CHUNKS_PER_DOCUMENT", "12")
+    monkeypatch.setenv("GRAPH_EXTRACTION_MIN_CONFIDENCE", "0.7")
+
+    settings = get_settings()
+
+    assert settings.graph_extraction_enabled is True
+    assert settings.graph_extraction_provider == "ollama"
+    assert settings.graph_extraction_api_key == "graph-key"
+    assert settings.graph_extraction_base_url == "https://graph.example/v1"
+    assert settings.graph_extraction_model == "graph-model"
+    assert settings.graph_extraction_max_chunks_per_document == 12
+    assert settings.graph_extraction_min_confidence == 0.7
+
+
+def test_graph_extraction_settings_reuse_llm_credentials_when_provider_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.setenv("LLM_API_KEY", "llm-key")
+    monkeypatch.setenv("LLM_BASE_URL", "https://router.example/v1")
+    monkeypatch.setenv("GRAPH_EXTRACTION_PROVIDER", "openrouter")
+    monkeypatch.setenv("GRAPH_EXTRACTION_MODEL", "graph-model")
+
+    settings = get_settings()
+
+    assert settings.graph_extraction_provider == "openrouter"
+    assert settings.graph_extraction_api_key == "llm-key"
+    assert settings.graph_extraction_base_url == "https://router.example/v1"
+    assert settings.graph_extraction_model == "graph-model"
+
+
+def test_graph_extraction_settings_do_not_reuse_llm_credentials_when_provider_differs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("LLM_API_KEY", "llm-key")
+    monkeypatch.setenv("GRAPH_EXTRACTION_PROVIDER", "openrouter")
+    monkeypatch.setenv("GRAPH_EXTRACTION_MODEL", "same-model-name")
+
+    settings = get_settings()
+
+    assert settings.graph_extraction_provider == "openrouter"
+    assert settings.graph_extraction_api_key is None
+    assert settings.graph_extraction_base_url == "https://openrouter.ai/api/v1"
+    assert settings.graph_extraction_model == "same-model-name"
+
+
 def test_catalog_tracks_kb_and_documents(tmp_path: Path) -> None:
     settings = get_settings()
     object.__setattr__(settings, "knowledge_bases_store_path", tmp_path / "knowledge_bases.json")

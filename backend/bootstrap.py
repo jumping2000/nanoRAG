@@ -7,6 +7,7 @@ from config import Settings
 from providers.embedding_provider import EmbeddingProvider
 from rag.catalog import MetadataCatalog
 from rag.graph_extractor import GraphExtractor
+from rag.structured_graph_extractor import StructuredGraphExtractor
 from rag.graph_store import GraphStore
 from rag.ingest import IngestionService
 from retrieval.dense_search import DenseRetriever
@@ -31,7 +32,12 @@ def build_ingestion_runtime(settings: Settings) -> IngestionRuntime:
     sparse_retriever = SparseRetriever(settings)
     chunker = StructuralChunker(settings.chunk_size_tokens, settings.chunk_overlap_tokens)
     catalog = MetadataCatalog(settings)
-    graph_extractor = GraphExtractor()
+    heuristic_graph_extractor = GraphExtractor()
+    graph_extractor = (
+        StructuredGraphExtractor(settings, fallback=heuristic_graph_extractor)
+        if settings.graph_extraction_enabled
+        else heuristic_graph_extractor
+    )
     graph_store = GraphStore(settings)
     ingestion_service = IngestionService(
         settings,

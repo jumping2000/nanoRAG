@@ -1,13 +1,13 @@
 "use client";
 
 import { LoaderCircle, Network, RefreshCcw, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { GraphEdge, GraphNode, GraphSnapshot } from "@/lib/types";
+import type { GraphEdge, GraphNode, GraphNodeDetail, GraphSnapshot } from "@/lib/types";
 import { cn, getErrorMessage } from "@/lib/utils";
-import { getKnowledgeGraph } from "@/services/api";
+import { getKnowledgeGraph, getKnowledgeGraphNodeDetail } from "@/services/api";
 
 type KnowledgeGraphPanelProps = {
   kbId: string;
@@ -25,13 +25,21 @@ const GRAPH_HEIGHT = 240;
 export function KnowledgeGraphPanel({ kbId }: KnowledgeGraphPanelProps) {
   const [snapshot, setSnapshot] = useState<GraphSnapshot | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState("");
+  const [selectedNodeDetail, setSelectedNodeDetail] = useState<GraphNodeDetail | null>(null);
+  const [nodeDetailCache, setNodeDetailCache] = useState<Record<string, GraphNodeDetail>>({});
+  const [isLoadingNodeDetail, setIsLoadingNodeDetail] = useState(false);
+  const [nodeDetailError, setNodeDetailError] = useState("");
   const [searchValue, setSearchValue] = useState("");
   const [minWeight, setMinWeight] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const lastNodeDetailRequest = useRef("");
 
   useEffect(() => {
     setSelectedNodeId("");
+    setSelectedNodeDetail(null);
+    setNodeDetailCache({});
+    setNodeDetailError("");
     setSearchValue("");
     void loadGraph(minWeight);
   }, [kbId]);
@@ -39,6 +47,28 @@ export function KnowledgeGraphPanel({ kbId }: KnowledgeGraphPanelProps) {
   useEffect(() => {
     void loadGraph(minWeight);
   }, [minWeight]);
+
+  useEffect(() => {
+    if (!snapshot?.nodes.length) {
+      setSelectedNodeDetail(null);
+      return;
+    }
+
+    const nodeId = selectedNodeId || snapshot.nodes[0]?.id;
+    if (!nodeId) {
+      setSelectedNodeDetail(null);
+      return;
+    }
+
+    const cached = nodeDetailCache[nodeId];
+    if (cached) {
+      setSelectedNodeDetail(cached);
+      setNodeDetailError("");
+      return;
+    }
+
+    void loadNodeDetail(nodeId);
+  }, [kbId, selectedNodeId, snapshot]);
 
   async function loadGraph(nextMinWeight: number) {
     setIsLoading(true);
@@ -58,6 +88,31 @@ export function KnowledgeGraphPanel({ kbId }: KnowledgeGraphPanelProps) {
       setSelectedNodeId("");
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function loadNodeDetail(nodeId: string) {
+    const requestKey = `${kbId}:${nodeId}`;
+    lastNodeDetailRequest.current = requestKey;
+    setIsLoadingNodeDetail(true);
+    setNodeDetailError("");
+    try {
+      const detail = await getKnowledgeGraphNodeDetail(kbId, nodeId, { evidenceLimit: 8 });
+      if (lastNodeDetailRequest.current !== requestKey) {
+        return;
+      }
+      setNodeDetailCache((current) => ({ ...current, [nodeId]: detail }));
+      setSelectedNodeDetail(detail);
+    } catch (nextError) {
+      if (lastNodeDetailRequest.current !== requestKey) {
+        return;
+      }
+      setSelectedNodeDetail(null);
+      setNodeDetailError(getErrorMessage(nextError, "Unable to load node detail"));
+    } finally {
+      if (lastNodeDetailRequest.current === requestKey) {
+        setIsLoadingNodeDetail(false);
+      }
     }
   }
 
@@ -101,9 +156,6 @@ export function KnowledgeGraphPanel({ kbId }: KnowledgeGraphPanelProps) {
 
   const view = buildGraphView(snapshot, searchValue, selectedNodeId);
   const selectedNode = view.nodes.find((item) => item.id === (selectedNodeId || view.nodes[0]?.id));
-  const relatedEdges = selectedNode
-    ? view.edges.filter((edge) => edge.source === selectedNode.id || edge.target === selectedNode.id)
-    : [];
   const layout = createCircularLayout(view.nodes);
 
   return (
@@ -202,33 +254,75 @@ export function KnowledgeGraphPanel({ kbId }: KnowledgeGraphPanelProps) {
               <p className="text-sm font-medium">{selectedNode.label}</p>
               <p className="mt-1 text-xs text-foreground/55">{selectedNode.entity_type} · {selectedNode.mentions} mentions</p>
             </div>
-            <Badge>{relatedEdges.length} links</Badge>
+            <Badge>{selectedNodeDetail?.stats.relations ?? 0} links</Badge>
           </div>
 
           <div className="mt-4 space-y-3">
-            {relatedEdges.length ? (
-              relatedEdges.map((edge) => {
-                const counterpart = edge.source === selectedNode.id ? view.nodeMap[edge.target] : view.nodeMap[edge.source];
-                return (
-                  <div key={edge.id} className="rounded-2xl border border-border/70 bg-card/75 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium">
-                        {edge.predicate.replaceAll("_", " ")} · {counterpart?.label ?? "Unknown"}
-                      </p>
-                      <Badge>{edge.weight}</Badge>
+            {isLoadingNodeDetail ? (
+              <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-card/75 p-3 text-sm text-foreground/60">
+                <LoaderCircle className="size-4 animate-spin" />
+                Loading node detail...
+              </div>
+            ) : null}
+
+            {nodeDetailError ? (
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-3 text-sm text-red-700 dark:text-red-300">
+                {nodeDetailError}
+              </div>
+            ) : null}
+
+            {selectedNodeDetail ? (
+              <>
+                <div className="grid grid-cols-3 gap-2 text-xs text-foreground/60">
+                  <GraphMetric label="Mentions" value={String(selectedNodeDetail.stats.mentions ?? 0)} />
+                  <GraphMetric label="Docs" value={String(selectedNodeDetail.stats.documents ?? 0)} />
+                  <GraphMetric label="Links" value={String(selectedNodeDetail.stats.relations ?? 0)} />
+                </div>
+
+                {selectedNodeDetail.relations.length ? (
+                  selectedNodeDetail.relations.map((relation) => (
+                    <div key={relation.edge_id} className="rounded-2xl border border-border/70 bg-card/75 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium">
+                            {relation.predicate.replaceAll("_", " ")} · {relation.counterpart.label}
+                          </p>
+                          <p className="mt-1 text-xs text-foreground/55">
+                            {relation.direction} · {relation.counterpart.entity_type}
+                          </p>
+                        </div>
+                        <Badge>{relation.weight}</Badge>
+                      </div>
+                      {relation.evidence.map((item) => (
+                        <div key={`${relation.edge_id}-${item.chunk_id}`} className="mt-3 rounded-2xl bg-background/70 p-3 text-xs text-foreground/70">
+                          <p className="font-medium text-foreground/85">{item.filename}</p>
+                          <p className="mt-1">page {item.page ?? "-"} · section {item.section ?? "-"}</p>
+                          <p className="mt-2 leading-5">{item.snippet}</p>
+                        </div>
+                      ))}
                     </div>
-                    {edge.evidence.slice(0, 2).map((item) => (
-                      <div key={`${edge.id}-${item.chunk_id}`} className="mt-3 rounded-2xl bg-background/70 p-3 text-xs text-foreground/70">
-                        <p className="font-medium text-foreground/85">{item.filename}</p>
-                        <p className="mt-1">page {item.page ?? "-"} · section {item.section ?? "-"}</p>
-                        <p className="mt-2 leading-5">{item.snippet}</p>
+                  ))
+                ) : (
+                  <p className="text-sm text-foreground/55">No connected relations for this node.</p>
+                )}
+
+                <div className="rounded-2xl border border-border/70 bg-card/75 p-3">
+                  <p className="text-sm font-medium">Backing documents</p>
+                  <div className="mt-3 space-y-2">
+                    {selectedNodeDetail.documents.map((document) => (
+                      <div key={document.document_id} className="flex items-center justify-between gap-3 rounded-2xl bg-background/70 px-3 py-2 text-xs text-foreground/70">
+                        <div>
+                          <p className="font-medium text-foreground/85">{document.filename}</p>
+                          <p className="mt-1">{document.document_id}</p>
+                        </div>
+                        <Badge>{document.mention_count}</Badge>
                       </div>
                     ))}
                   </div>
-                );
-              })
+                </div>
+              </>
             ) : (
-              <p className="text-sm text-foreground/55">No connected relations in the current graph window.</p>
+              <p className="text-sm text-foreground/55">Select a node to inspect its relations and backing documents.</p>
             )}
           </div>
         </div>

@@ -6,7 +6,7 @@ import time
 from uuid import uuid4
 from collections.abc import Iterator
 
-from fastapi import FastAPI, File, Query, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -17,12 +17,14 @@ from config import get_settings
 from models import (
     ChatRequest,
     DeleteResponse,
+    GraphNodeDetail,
     GraphSnapshot,
     HealthResponse,
     KnowledgeBaseCreateRequest,
     KnowledgeBaseUpdateRequest,
     SourceCitation,
 )
+from retrieval.graph_reranker import GraphReranker
 from retrieval.hybrid_search import HybridRetriever
 from observability import (
     bind_request_context,
@@ -44,6 +46,10 @@ sparse_retriever = runtime.sparse_retriever
 hybrid_retriever = HybridRetriever(settings, dense_retriever, sparse_retriever)
 catalog = runtime.catalog
 graph_store = runtime.graph_store
+graph_reranker = GraphReranker(
+    graph_store,
+    min_confidence=settings.graph_extraction_min_confidence,
+)
 ingestion_service = runtime.ingestion_service
 orchestrator = OrchestratorAgent(settings)
 knowledge_agent = KnowledgeAgent(settings)
@@ -156,8 +162,15 @@ def delete_kb(kb_id: str) -> DeleteResponse:
 
 
 @app.post("/kb/{kb_id}/upload")
-async def upload(kb_id: str, files: list[UploadFile] = File(...)) -> dict[str, object]:
-    uploaded = [await ingestion_service.ingest_upload(kb_id, file) for file in files]
+async def upload(
+    kb_id: str,
+    background_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+) -> dict[str, object]:
+    uploaded = [
+        await ingestion_service._ingest_upload(kb_id, file, background_tasks=background_tasks)
+        for file in files
+    ]
     observe(
         logger,
         logging.INFO,
@@ -197,6 +210,28 @@ def get_graph(
     return snapshot
 
 
+@app.get("/kb/{kb_id}/graph/node/{entity_id}", response_model=GraphNodeDetail)
+def get_graph_node_detail(
+    kb_id: str,
+    entity_id: str,
+    evidence_limit: int = Query(default=12, ge=1, le=24),
+) -> GraphNodeDetail:
+    catalog.get_kb(kb_id)
+    detail = graph_store.get_node_detail(kb_id=kb_id, entity_id=entity_id, evidence_limit=evidence_limit)
+    observe(
+        logger,
+        logging.INFO,
+        "api",
+        "graph.node_detail.responded",
+        kb_id=kb_id,
+        entity_id=entity_id,
+        mentions=detail.stats.get("mentions", 0),
+        documents=detail.stats.get("documents", 0),
+        relations=detail.stats.get("relations", 0),
+    )
+    return detail
+
+
 @app.delete("/kb/{kb_id}/documents/{document_id}", response_model=DeleteResponse)
 def delete_document(kb_id: str, document_id: str) -> DeleteResponse:
     ingestion_service.delete_document(kb_id, document_id)
@@ -209,6 +244,7 @@ def chat(request: ChatRequest) -> StreamingResponse:
     catalog.get_kb(request.kb_id)
     plan = orchestrator.plan(request.message)
     chunks = hybrid_retriever.search(plan.search_query, kb_id=request.kb_id, top_k=request.top_k)
+    chunks = graph_reranker.rerank(request.kb_id, chunks)
     observe(
         logger,
         logging.INFO,

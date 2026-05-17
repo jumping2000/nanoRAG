@@ -4,6 +4,7 @@ import re
 from collections.abc import Iterable
 
 from models import ChunkMetadata, ExtractedEntity, ExtractedRelation
+from rag.graph_normalization import canonicalize_entity_label
 
 SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+|\n+")
 TITLE_PHRASE_PATTERN = re.compile(
@@ -217,5 +218,4 @@ class GraphExtractor:
 
     @staticmethod
     def canonicalize_label(label: str) -> str:
-        normalized = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
-        return normalized or "entity"
+        return canonicalize_entity_label(label)

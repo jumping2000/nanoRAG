@@ -118,6 +118,126 @@ Example response:
 
 Delete one indexed document and all of its chunks.
 
+## `GET /kb/{id}/graph`
+
+Return the lightweight graph snapshot for one knowledge base.
+
+Query parameters:
+
+- `limit`: max number of edges returned, default `18`
+- `min_weight`: minimum aggregated edge weight, default `1`
+
+Example response:
+
+```json
+{
+  "kb_id": "architecture",
+  "nodes": [
+    {
+      "id": "fastapi",
+      "label": "FastAPI",
+      "entity_type": "system",
+      "mentions": 3
+    },
+    {
+      "id": "qdrant",
+      "label": "Qdrant",
+      "entity_type": "database",
+      "mentions": 2
+    }
+  ],
+  "edges": [
+    {
+      "id": "fastapi:uses:qdrant",
+      "source": "fastapi",
+      "target": "qdrant",
+      "predicate": "uses",
+      "weight": 2,
+      "evidence": [
+        {
+          "chunk_id": "arch-1",
+          "document_id": "architecture-doc",
+          "filename": "architecture.md",
+          "page": 1,
+          "section": "Overview",
+          "snippet": "FastAPI uses Qdrant for vector retrieval.",
+          "confidence": 0.75
+        }
+      ]
+    }
+  ],
+  "stats": {
+    "nodes": 2,
+    "edges": 1,
+    "mentions": 5
+  }
+}
+```
+
+## `GET /kb/{id}/graph/node/{entity_id}`
+
+Return the rich node detail payload for one entity inside one KB.
+
+Query parameters:
+
+- `evidence_limit`: max evidence rows per grouped relation, default `12`
+
+Example response:
+
+```json
+{
+  "node": {
+    "id": "fastapi",
+    "label": "FastAPI",
+    "entity_type": "system",
+    "mentions": 3
+  },
+  "relations": [
+    {
+      "edge_id": "fastapi:uses:qdrant",
+      "predicate": "uses",
+      "direction": "outgoing",
+      "counterpart": {
+        "id": "qdrant",
+        "label": "Qdrant",
+        "entity_type": "database",
+        "mentions": 0
+      },
+      "weight": 2,
+      "evidence": [
+        {
+          "chunk_id": "arch-1",
+          "document_id": "architecture-doc",
+          "filename": "architecture.md",
+          "page": 1,
+          "section": "Overview",
+          "snippet": "FastAPI uses Qdrant for vector retrieval.",
+          "confidence": 0.75
+        }
+      ]
+    }
+  ],
+  "documents": [
+    {
+      "document_id": "architecture-doc",
+      "filename": "architecture.md",
+      "mention_count": 3
+    }
+  ],
+  "stats": {
+    "mentions": 3,
+    "documents": 1,
+    "relations": 1
+  }
+}
+```
+
+Important behavior:
+
+- the payload is scoped to one KB only
+- deleted documents disappear from node detail once their graph mention rows are removed
+- this endpoint is intended for node inspection and should be fetched lazily from the frontend
+
 ## `POST /chat`
 
 Request body:

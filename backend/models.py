@@ -4,6 +4,55 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+GraphEntityType = Literal[
+    "organization",
+    "system",
+    "service",
+    "database",
+    "person",
+    "location",
+    "artifact",
+    "concept",
+    "other",
+]
+GRAPH_ENTITY_TYPES: tuple[str, ...] = (
+    "organization",
+    "system",
+    "service",
+    "database",
+    "person",
+    "location",
+    "artifact",
+    "concept",
+    "other",
+)
+GraphPredicate = Literal[
+    "depends_on",
+    "connects_to",
+    "uses",
+    "stores",
+    "indexes",
+    "retrieves_from",
+    "runs_on",
+    "belongs_to",
+    "manages",
+    "references",
+    "related_to",
+]
+GRAPH_PREDICATES: tuple[str, ...] = (
+    "depends_on",
+    "connects_to",
+    "uses",
+    "stores",
+    "indexes",
+    "retrieves_from",
+    "runs_on",
+    "belongs_to",
+    "manages",
+    "references",
+    "related_to",
+)
+
 
 class KnowledgeBaseCreateRequest(BaseModel):
     id: str = Field(min_length=1)
@@ -57,6 +106,24 @@ class ExtractedRelation(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
+class GraphExtractionEntity(BaseModel):
+    label: str = Field(min_length=1)
+    entity_type: GraphEntityType = "concept"
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class GraphExtractionRelation(BaseModel):
+    source_label: str = Field(min_length=1)
+    target_label: str = Field(min_length=1)
+    predicate: GraphPredicate
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class GraphExtractionResult(BaseModel):
+    entities: list[GraphExtractionEntity] = Field(default_factory=list)
+    relations: list[GraphExtractionRelation] = Field(default_factory=list)
+
+
 class RetrievedChunk(ChunkMetadata):
     score: float = 0.0
     rank: int = 0
@@ -98,6 +165,21 @@ class GraphEdge(BaseModel):
     evidence: list[GraphEvidence] = Field(default_factory=list)
 
 
+class GraphNodeRelation(BaseModel):
+    edge_id: str
+    predicate: str
+    direction: Literal["incoming", "outgoing"]
+    counterpart: GraphNode
+    weight: int = 1
+    evidence: list[GraphEvidence] = Field(default_factory=list)
+
+
+class GraphNodeDocument(BaseModel):
+    document_id: str
+    filename: str
+    mention_count: int = 0
+
+
 class GraphStats(BaseModel):
     nodes: int = 0
     edges: int = 0
@@ -109,6 +191,13 @@ class GraphSnapshot(BaseModel):
     nodes: list[GraphNode] = Field(default_factory=list)
     edges: list[GraphEdge] = Field(default_factory=list)
     stats: GraphStats = Field(default_factory=GraphStats)
+
+
+class GraphNodeDetail(BaseModel):
+    node: GraphNode
+    relations: list[GraphNodeRelation] = Field(default_factory=list)
+    documents: list[GraphNodeDocument] = Field(default_factory=list)
+    stats: dict[str, int] = Field(default_factory=dict)
 
 
 class ChatRequest(BaseModel):

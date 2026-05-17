@@ -8,8 +8,8 @@ The backend is a single FastAPI service organized around retrieval, ingestion an
 - `agents/`: Orchestrator and Knowledge agent wrappers built with Agno.
 - `chunking/`: structural chunking logic.
 - `providers/`: LLM and embedding provider abstraction.
-- `retrieval/`: dense search, sparse BM25 and fusion.
-- `rag/`: ingestion, KB/document catalog, and metadata helpers.
+- `retrieval/`: dense search, sparse BM25, fusion, and graph-aware reranking.
+- `rag/`: ingestion, KB/document catalog, graph extraction/store, and metadata helpers.
 - `db/`: Qdrant client bootstrap.
 
 ## Multi-KB design
@@ -48,7 +48,28 @@ Responsibilities:
 3. Query Qdrant with a payload filter on `kb_id`.
 4. Run BM25 locally on the in-memory chunk corpus for that `kb_id`.
 5. Merge rankings with RRF.
-4. Feed top chunks to the Knowledge Agent.
+6. Apply a conservative graph-aware reranking pass using graph evidence already stored per chunk.
+7. Feed top chunks to the Knowledge Agent.
+
+### Graph-aware reranking
+
+The first graph-aware improvement is intentionally narrow.
+
+Current runtime behavior:
+
+- reranking runs only on `POST /chat`
+- the candidate set still comes from dense + sparse + RRF
+- the backend reads chunk-scoped graph evidence from the SQLite graph store
+- relation-bearing chunks receive more bonus than entity-only chunks
+- if graph evidence is absent or weak, the original hybrid order is preserved
+
+The implementation is split across:
+
+- `backend/retrieval/graph_reranker.py`: conservative post-retrieval reranking logic
+- `backend/rag/graph_store.py`: chunk-batch graph summary lookup for reranking
+- `backend/api/main.py`: chat-path wiring
+
+This keeps graph-aware behavior additive rather than invasive.
 
 ## Ingestion policy
 
@@ -59,6 +80,71 @@ Uploads are parsed in-memory.
 - only chunks and metadata are persisted
 - raw source files are discarded after extraction
 
+## Knowledge graph pipeline
+
+The backend builds a KB-scoped knowledge graph from chunk text during ingestion.
+
+Current runtime behavior:
+
+- chunk text is analyzed immediately after dense and sparse indexing
+- graph facts are stored in SQLite as mention-level rows
+- graph extraction errors are isolated at chunk level and do not fail the whole upload
+- document catalog writes complete before optional structured graph extraction finishes, so uploads do not stay blocked waiting for graph work
+
+### Extraction modes
+
+Two extractor paths now exist:
+
+- heuristic extractor: `backend/rag/graph_extractor.py`
+- structured extractor: `backend/rag/structured_graph_extractor.py`
+
+The structured extractor is behind feature flags in `Settings`:
+
+- `GRAPH_EXTRACTION_ENABLED`
+- `GRAPH_EXTRACTION_PROVIDER`
+- `GRAPH_EXTRACTION_MODEL`
+- `GRAPH_EXTRACTION_MAX_CHUNKS_PER_DOCUMENT`
+- `GRAPH_EXTRACTION_MIN_CONFIDENCE`
+
+Default behavior:
+
+- `GRAPH_EXTRACTION_ENABLED=false`: the backend uses the heuristic extractor only
+- `GRAPH_EXTRACTION_ENABLED=true`: the backend tries structured extraction and falls back to the heuristic extractor if the structured output is invalid at runtime
+
+The structured extractor uses:
+
+- `backend/prompts/graph_extraction.md` for the extraction instructions
+- `backend/rag/graph_normalization.py` for deterministic entity and predicate normalization
+- `backend/models.py` extraction DTOs as the trusted schema boundary for model output
+
+### Graph read surfaces
+
+The backend now exposes two graph read paths:
+
+- snapshot overview: `GET /kb/{kb_id}/graph`
+- node inspection: `GET /kb/{kb_id}/graph/node/{entity_id}`
+
+The snapshot endpoint is intentionally small and overview-first.
+The node-detail endpoint lazily loads richer evidence, grouped relations, and backing documents for one entity.
+
+### Benchmark harness
+
+The repository now includes a fixture-based extractor comparison harness in `backend/graph_benchmark.py`.
+
+Run from `backend/`:
+
+```bash
+uv run python graph_benchmark.py --fixture tests/fixtures/graph_benchmark_chunks.json
+```
+
+What it reports:
+
+- entity and relation mention counts per extractor
+- unique entities and unique relations
+- predicate distribution
+- chunk-level deltas between heuristic and structured extraction
+- chunk failures in the candidate extractor
+
 ## API runtime
 
 The application keeps a shared in-process retriever stack:
@@ -67,10 +153,15 @@ The application keeps a shared in-process retriever stack:
 - `DenseRetriever`
 - `SparseRetriever`
 - `HybridRetriever`
+- `GraphReranker`
 - `MetadataCatalog`
 - `IngestionService`
 
 This keeps the service simple and avoids premature orchestration layers.
+
+The graph runtime is built into the same shared process stack through `build_ingestion_runtime()`.
+This is where the extractor implementation is selected and the fallback behavior is wired.
+The reranker reuses the same in-process graph store and does not introduce a second retrieval service.
 
 ## Maintenance utilities
 

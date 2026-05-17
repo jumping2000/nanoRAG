@@ -1,6 +1,6 @@
 # Hybrid Search
 
-nanoRAG combines dense retrieval and sparse BM25 retrieval, then merges both rankings with Reciprocal Rank Fusion.
+nanoRAG combines dense retrieval and sparse BM25 retrieval, merges both rankings with Reciprocal Rank Fusion, then applies a small graph-aware reranking pass on chat candidates.
 
 Each query is scoped to the active knowledge base through `kb_id` filtering.
 
@@ -55,3 +55,29 @@ Where:
 - low implementation complexity
 - easy to debug and extend
 - future-compatible with global multi-KB search without changing the collection layout
+
+## Graph-aware reranking
+
+The current reranking layer is intentionally minimal and only runs on `POST /chat`.
+
+How it works:
+
+- dense and sparse retrieval still generate the candidate set
+- RRF still provides the base order
+- the backend loads chunk-scoped graph evidence from the SQLite graph store
+- each chunk receives a conservative graph bonus
+- relation evidence is weighted more heavily than entity-only evidence
+- if graph evidence is missing, the original RRF order is preserved
+
+What it is not:
+
+- not graph-only retrieval
+- not multi-hop traversal
+- not query expansion
+- not a replacement for dense or sparse search
+
+Why this first step exists:
+
+- improve relational questions without widening the architecture too much
+- reuse graph evidence already produced during ingestion
+- keep rollback cheap if graph noise hurts ranking quality

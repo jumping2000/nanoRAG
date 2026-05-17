@@ -1,5 +1,6 @@
 import type {
   DocumentSummary,
+  GraphNodeDetail,
   GraphSnapshot,
   KnowledgeBase,
   KnowledgeBasePayload,
@@ -202,4 +203,25 @@ export async function getKnowledgeGraph(
     throw new Error(`Graph request failed with status ${response.status}`);
   }
   return (await response.json()) as GraphSnapshot;
+}
+
+export async function getKnowledgeGraphNodeDetail(
+  kbId: string,
+  entityId: string,
+  options?: { evidenceLimit?: number },
+): Promise<GraphNodeDetail> {
+  const params = new URLSearchParams();
+  if (options?.evidenceLimit) {
+    params.set("evidence_limit", String(options.evidenceLimit));
+  }
+
+  const query = params.toString();
+  const response = await fetch(
+    `${API_BASE_URL}/kb/${encodeURIComponent(kbId)}/graph/node/${encodeURIComponent(entityId)}${query ? `?${query}` : ""}`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw new Error(`Graph node detail request failed with status ${response.status}`);
+  }
+  return (await response.json()) as GraphNodeDetail;
 }

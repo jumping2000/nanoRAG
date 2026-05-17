@@ -30,6 +30,7 @@ cd backend
 uv run pytest
 uv run ruff check .
 uv run mypy .
+uv run python graph_benchmark.py --fixture tests/fixtures/graph_benchmark_chunks.json
 ```
 
 ### Backend maintenance
@@ -69,3 +70,5 @@ npm run build
 - BM25 state is rebuilt from `backend/data/chunks.jsonl` on startup.
 - Qdrant stores the dense vectors and chunk payloads.
 - The frontend expects the backend on `NEXT_PUBLIC_API_BASE_URL`.
+- Structured graph extraction is disabled by default and can be enabled with `GRAPH_EXTRACTION_ENABLED=true`.
+- The graph benchmark script is fixture-based and intended for local extractor comparisons before running manual smoke tests on real documents.

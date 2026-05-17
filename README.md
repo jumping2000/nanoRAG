@@ -8,8 +8,10 @@ nanoRAG is designed for teams that want a clean RAG system without unnecessary i
 
 - 🧠 Agentic answer generation with Agno
 - 🔎 Hybrid retrieval with dense search + BM25 + RRF
+- 🔁 Minimal graph-aware reranking on the `/chat` path
 - 🗂️ Multi-knowledge-base support with KB-scoped chat and uploads
 - 🧱 Single shared Qdrant collection filtered by `kb_id`
+- 🕸️ Lightweight knowledge graph extraction with KB-scoped graph inspection
 - 💻 CPU-friendly backend, including CPU-only PyTorch setup
 - 🌊 Streaming chat responses over NDJSON
 - 🛡️ No raw PDF/TXT/MD retention after ingestion, only chunks and metadata
@@ -32,8 +34,9 @@ The platform keeps retrieval and reasoning strictly separated.
 3. Dense retrieval searches Qdrant with a payload filter on `kb_id`.
 4. Sparse retrieval searches the local BM25 index scoped to the same KB.
 5. Results are fused with RRF.
-6. The grounded context is sent to the knowledge agent.
-7. The answer is streamed back to the UI.
+6. The fused chunks are reranked with a small graph-aware bonus derived from per-chunk graph evidence already stored in SQLite.
+7. The grounded context is sent to the knowledge agent.
+8. The answer is streamed back to the UI.
 
 ## 🧩 Core capabilities
 
@@ -42,6 +45,8 @@ The platform keeps retrieval and reasoning strictly separated.
 - List and delete indexed documents per knowledge base
 - Chat against one knowledge base at a time
 - Surface source citations with chunk/document metadata
+- Build a KB-scoped knowledge graph from chunk text and inspect node-level evidence
+- Gently promote relation-bearing chunks during chat without replacing the existing hybrid retriever
 - Keep infrastructure simple enough for local development and small production deployments
 
 ## 📁 Project structure
@@ -115,6 +120,46 @@ Important runtime details:
 - Retrieval is local and CPU-friendly
 - Uploaded source files are processed in-memory and discarded after ingestion
 
+### Knowledge graph extraction
+
+The graph pipeline now has two modes:
+
+- default heuristic extraction through `backend/rag/graph_extractor.py`
+- optional structured extraction through `backend/rag/structured_graph_extractor.py`
+
+Structured extraction is disabled by default and can be rolled out behind these flags:
+
+- `GRAPH_EXTRACTION_ENABLED`
+- `GRAPH_EXTRACTION_PROVIDER`
+- `GRAPH_EXTRACTION_MODEL`
+- `GRAPH_EXTRACTION_MAX_CHUNKS_PER_DOCUMENT`
+- `GRAPH_EXTRACTION_MIN_CONFIDENCE`
+
+Important behavior:
+
+- ingestion never fails only because graph extraction failed for one chunk
+- when structured extraction is enabled, the backend caps graph extraction work per document with `GRAPH_EXTRACTION_MAX_CHUNKS_PER_DOCUMENT`
+- the runtime keeps the heuristic extractor as fallback if structured extraction returns invalid output
+- upload completion no longer waits for structured graph extraction; document catalog writes complete first and graph work continues in the background
+
+### Graph-aware reranking
+
+The chat path now adds one minimal graph-aware reranking step after dense + BM25 + RRF.
+
+Current behavior:
+
+- the base retriever still decides the candidate set
+- the backend loads chunk-scoped graph evidence from `backend/data/knowledge_graph.db`
+- chunks with stronger relation evidence receive a conservative bonus
+- retrieval remains the dominant signal, so weak or missing graph evidence preserves the original order
+
+Current scope:
+
+- active only on `POST /chat`
+- uses graph evidence already persisted during ingestion
+- does not replace RRF, query expansion, or multi-hop traversal
+- does not change the graph inspection APIs
+
 ### `APP_ENV` modes
 
 The backend now exposes three observability profiles through `APP_ENV`:
@@ -138,6 +183,8 @@ Main endpoints:
 - `DELETE /kb/{kb_id}`
 - `POST /kb/{kb_id}/upload`
 - `GET /kb/{kb_id}/documents`
+- `GET /kb/{kb_id}/graph`
+- `GET /kb/{kb_id}/graph/node/{entity_id}`
 - `DELETE /kb/{kb_id}/documents/{document_id}`
 - `POST /chat`
 
@@ -151,6 +198,15 @@ Backend tests:
 cd backend
 uv run pytest
 ```
+
+Graph extractor benchmark fixture:
+
+```bash
+cd backend
+uv run python graph_benchmark.py --fixture tests/fixtures/graph_benchmark_chunks.json
+```
+
+Reranking behavior is covered by backend tests as part of the normal suite, including a chat-path assertion that the reranked chunk order reaches both the knowledge agent and emitted sources.
 
 Frontend type check:
 
@@ -194,6 +250,7 @@ Notes:
 - [docs/architecture.md](docs/architecture.md)
 - [docs/api.md](docs/api.md)
 - [docs/backend.md](docs/backend.md)
+- [docs/development.md](docs/development.md)
 - [docs/frontend.md](docs/frontend.md)
 - [docs/hybrid-search.md](docs/hybrid-search.md)
 - [docs/providers.md](docs/providers.md)

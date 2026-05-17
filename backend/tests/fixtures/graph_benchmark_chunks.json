@@ -1,0 +1,26 @@
+[
+  {
+    "chunk_id": "arch-1",
+    "kb_id": "architecture",
+    "kb_name": "Architecture",
+    "document_id": "architecture-doc-a",
+    "source": "kb:architecture/document:architecture-doc-a",
+    "filename": "architecture-a.md",
+    "page": 1,
+    "section": "Overview",
+    "text": "FastAPI uses Qdrant for vector retrieval.",
+    "token_count": 6
+  },
+  {
+    "chunk_id": "arch-2",
+    "kb_id": "architecture",
+    "kb_name": "Architecture",
+    "document_id": "architecture-doc-b",
+    "source": "kb:architecture/document:architecture-doc-b",
+    "filename": "architecture-b.md",
+    "page": 2,
+    "section": "Storage",
+    "text": "Qdrant stores embeddings for API search.",
+    "token_count": 6
+  }
+]
