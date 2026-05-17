@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+import logging
+import time
 from collections.abc import Sequence
 
 from openai import OpenAI
 
 from config import Settings
+from observability import observe
 from providers.ollama import OllamaEmbeddingClient
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingProvider:
@@ -28,18 +33,21 @@ class EmbeddingProvider:
             )
 
     def embed_texts(self, texts: Sequence[str]) -> list[list[float]]:
+        started = time.perf_counter()
         normalized = [text.strip() for text in texts]
         if not normalized:
             return []
 
         results: list[list[float] | None] = [None] * len(normalized)
         missing: dict[str, dict[str, object]] = {}
+        cache_hits = 0
 
         for index, text in enumerate(normalized):
             key = hashlib.sha1(text.encode("utf-8")).hexdigest()
             cached = self._cache.get(key)
             if cached is not None:
                 results[index] = cached
+                cache_hits += 1
                 continue
             entry = missing.setdefault(key, {"text": text, "indexes": []})
             entry["indexes"].append(index)
@@ -55,7 +63,19 @@ class EmbeddingProvider:
                 for index in entry["indexes"]:
                     results[index] = embedding
 
-        return [embedding for embedding in results if embedding is not None]
+        embeddings = [embedding for embedding in results if embedding is not None]
+        observe(
+            logger,
+            logging.DEBUG,
+            "embedding",
+            "batch.completed",
+            provider=self.settings.embedding_provider,
+            batch_size=len(normalized),
+            cache_hits=cache_hits,
+            cache_misses=len(missing),
+            elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+        return embeddings
 
     def _request_embeddings(self, texts: Sequence[str]) -> list[list[float]]:
         if self._ollama_client is not None:

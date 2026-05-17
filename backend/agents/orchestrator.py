@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
 
 from agno.agent import Agent
 from pydantic import BaseModel
 
 from config import Settings
+from observability import observe
 from providers.llm_provider import build_llm_model
 
 JSON_PATTERN = re.compile(r"\{.*\}", re.DOTALL)
 WHITESPACE_PATTERN = re.compile(r"\s+")
+logger = logging.getLogger(__name__)
 
 
 class RetrievalPlan(BaseModel):
@@ -27,6 +31,7 @@ class OrchestratorAgent:
 
     def plan(self, message: str) -> RetrievalPlan:
         fallback = self._fallback_plan(message)
+        started = time.perf_counter()
 
         try:
             agent = Agent(
@@ -45,15 +50,45 @@ class OrchestratorAgent:
             content = str(getattr(response, "content", "")).strip()
             matched = JSON_PATTERN.search(content)
             if not matched:
+                observe(
+                    logger,
+                    logging.WARNING,
+                    "orchestrator",
+                    "plan.fallback",
+                    reason="missing_json",
+                    message_length=len(message),
+                    elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+                )
                 return fallback
             payload = json.loads(matched.group(0))
-            return RetrievalPlan(
+            plan = RetrievalPlan(
                 original_query=message,
                 search_query=str(payload.get("search_query") or fallback.search_query).strip(),
                 needs_retrieval=bool(payload.get("needs_retrieval", True)),
                 answer_style=str(payload.get("answer_style") or "grounded"),
             )
-        except Exception:
+            observe(
+                logger,
+                logging.INFO,
+                "orchestrator",
+                "plan.generated",
+                search_query=plan.search_query,
+                needs_retrieval=plan.needs_retrieval,
+                answer_style=plan.answer_style,
+                message_length=len(message),
+                elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+            )
+            return plan
+        except Exception as error:
+            observe(
+                logger,
+                logging.WARNING,
+                "orchestrator",
+                "plan.fallback",
+                reason=type(error).__name__,
+                message_length=len(message),
+                elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+            )
             return fallback
 
     def _fallback_plan(self, message: str) -> RetrievalPlan:

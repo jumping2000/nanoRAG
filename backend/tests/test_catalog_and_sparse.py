@@ -1,9 +1,49 @@
 from pathlib import Path
 
+import pytest
+
 from config import get_settings
 from models import ChunkMetadata, DocumentRecord
 from rag.catalog import MetadataCatalog
 from retrieval.sparse_search import SparseRetriever
+
+
+@pytest.mark.parametrize(
+    ("raw_env", "expected", "deep_observability", "trace_details"),
+    [
+        ("development", "development", True, False),
+        ("production", "production", False, False),
+        ("debug", "debug", True, True),
+        (" DEBUG ", "debug", True, True),
+    ],
+)
+def test_settings_normalize_supported_app_env_values(
+    monkeypatch: pytest.MonkeyPatch,
+    raw_env: str,
+    expected: str,
+    deep_observability: bool,
+    trace_details: bool,
+) -> None:
+    monkeypatch.setenv("APP_ENV", raw_env)
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.environment == expected
+    assert settings.enable_deep_observability is deep_observability
+    assert settings.enable_trace_details is trace_details
+
+    get_settings.cache_clear()
+
+
+def test_settings_reject_invalid_app_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_ENV", "staging")
+    get_settings.cache_clear()
+
+    with pytest.raises(ValueError, match="APP_ENV must be one of"):
+        get_settings()
+
+    get_settings.cache_clear()
 
 
 def test_catalog_tracks_kb_and_documents(tmp_path: Path) -> None:

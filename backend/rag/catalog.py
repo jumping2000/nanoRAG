@@ -42,6 +42,17 @@ class MetadataCatalog:
         self._save_kb_map(kb_map)
         return KnowledgeBaseRecord(id=kb_id, name=name, documents=0, chunks=0)
 
+    def upsert_kb(self, kb_id: str, name: str) -> KnowledgeBaseRecord:
+        kb_map = self._load_kb_map()
+        kb_map[kb_id] = name
+        self._save_kb_map(kb_map)
+
+        for kb in self.list_kbs():
+            if kb.id == kb_id:
+                return kb
+
+        return KnowledgeBaseRecord(id=kb_id, name=name, documents=0, chunks=0)
+
     def rename_kb(self, kb_id: str, name: str) -> KnowledgeBaseRecord:
         kb_map = self._load_kb_map()
         if kb_id not in kb_map:
@@ -93,6 +104,13 @@ class MetadataCatalog:
         documents.append(document)
         self._save_documents(documents)
         return document
+
+    def replace_documents(self, kb_id: str, documents: Iterable[DocumentRecord]) -> list[DocumentRecord]:
+        replacement = list(documents)
+        current_documents = [item for item in self._load_documents() if item.kb_id != kb_id]
+        current_documents.extend(replacement)
+        self._save_documents(current_documents)
+        return replacement
 
     def delete_document(self, kb_id: str, document_id: str) -> DocumentRecord:
         self.get_kb(kb_id)

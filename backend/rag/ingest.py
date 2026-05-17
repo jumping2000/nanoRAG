@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
-from datetime import UTC, datetime
+import time
 
 from fastapi import HTTPException, UploadFile
 from pypdf import PdfReader
@@ -17,6 +18,7 @@ from rag.graph_store import GraphStore
 from rag.metadata import build_document_id
 from retrieval.dense_search import DenseRetriever
 from retrieval.sparse_search import SparseRetriever
+from observability import observe
 
 SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md"}
 logger = logging.getLogger(__name__)
@@ -42,6 +44,7 @@ class IngestionService:
         self.graph_store = graph_store
 
     async def ingest_upload(self, kb_id: str, upload: UploadFile) -> UploadResponse:
+        started = time.perf_counter()
         kb = self.catalog.get_kb(kb_id)
         filename = Path(upload.filename or "document").name
         extension = Path(filename).suffix.lower()
@@ -69,7 +72,16 @@ class IngestionService:
             try:
                 entities, relations = self.graph_extractor.extract(chunk)
                 self.graph_store.replace_chunk(chunk, entities, relations)
-            except Exception:
+            except Exception as error:
+                observe(
+                    logger,
+                    logging.WARNING,
+                    "ingest",
+                    "graph_extract.failed",
+                    kb_id=kb.id,
+                    chunk_id=chunk.chunk_id,
+                    reason=type(error).__name__,
+                )
                 continue
         self.catalog.upsert_document(
             DocumentRecord(
@@ -80,6 +92,18 @@ class IngestionService:
                 chunk_count=len(chunks),
                 created_at=datetime.now(UTC).isoformat(),
             ),
+        )
+        observe(
+            logger,
+            logging.INFO,
+            "ingest",
+            "upload.completed",
+            kb_id=kb.id,
+            document_id=document_id,
+            filename=filename,
+            pages=len(pages),
+            chunks=len(chunks),
+            elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
         )
 
         return UploadResponse(
@@ -99,9 +123,11 @@ class IngestionService:
         self.dense_retriever.delete_document(kb_id, document_id)
         self.sparse_retriever.delete_document(kb_id, document_id)
         self.graph_store.delete_document(kb_id, document_id)
+        observe(logger, logging.INFO, "ingest", "document.deleted", kb_id=kb_id, document_id=document_id)
         return deleted
 
     def delete_kb(self, kb_id: str) -> KnowledgeBaseDeleteResult:
+        started = time.perf_counter()
         stores: list[DeleteStoreResult] = []
 
         metadata_deleted = self.catalog.delete_kb(kb_id)
@@ -122,6 +148,15 @@ class IngestionService:
                 stores.append(DeleteStoreResult(store=store_name, status="deleted"))
             except Exception as error:
                 logger.exception("KB deletion failed in %s store", store_name, extra={"kb_id": kb_id})
+                observe(
+                    logger,
+                    logging.ERROR,
+                    "ingest",
+                    "kb_delete.store_failed",
+                    kb_id=kb_id,
+                    store=store_name,
+                    reason=type(error).__name__,
+                )
                 stores.append(
                     DeleteStoreResult(
                         store=store_name,
@@ -145,6 +180,15 @@ class IngestionService:
                     "stores": [item.model_dump() for item in result.stores],
                 },
             )
+        observe(
+            logger,
+            logging.INFO,
+            "ingest",
+            "kb_delete.completed",
+            kb_id=kb_id,
+            stores=[item.model_dump() for item in stores],
+            elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
         return result
 
     def _extract_pages(self, extension: str, content: bytes) -> list[tuple[int, str]]:

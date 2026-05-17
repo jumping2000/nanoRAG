@@ -115,6 +115,18 @@ Important runtime details:
 - Retrieval is local and CPU-friendly
 - Uploaded source files are processed in-memory and discarded after ingestion
 
+### `APP_ENV` modes
+
+The backend now exposes three observability profiles through `APP_ENV`:
+
+- `production`: light logs, warnings and errors only
+- `development`: deeper request and application logs for normal local debugging
+- `debug`: detailed request tracing with backend and database operation metadata
+
+When `APP_ENV` is `development` or `debug`, API responses include `X-Request-ID` and `X-Debug-Trace-Mode` headers.
+
+When `APP_ENV` is `debug`, the backend also emits technical trace events for request handling, retrieval, embeddings, Qdrant and SQLite operations. The `/chat` NDJSON stream includes an extra final `debug` event with the trace snapshot.
+
 ## 📡 API overview
 
 Main endpoints:
@@ -146,6 +158,36 @@ Frontend type check:
 cd frontend
 npm run typecheck
 ```
+
+## 🧰 Maintenance
+
+The backend now includes two maintenance surfaces:
+
+- `backend/maintenance.py`: Python service functions for cross-store cleanup and recovery.
+- `backend/maintenance_cli.py`: command-line wrapper around those functions.
+
+What they do:
+
+- `delete-kb <kb_id>`: removes one KB from metadata JSON, sparse chunk store, graph SQLite, and Qdrant.
+- `rebuild-kb <kb_id>`: reconstructs KB metadata and document records from `backend/data/chunks.jsonl` when sparse chunks still exist but the catalog was lost.
+- `purge-qdrant-orphans`: removes Qdrant points with missing `kb_id` payloads.
+- `reset-all`: wipes metadata JSON, sparse chunks, graph DB, uploads, and the configured Qdrant collection.
+
+Run from `backend/`:
+
+```bash
+cd backend
+uv run python maintenance_cli.py delete-kb test
+uv run python maintenance_cli.py rebuild-kb test2
+uv run python maintenance_cli.py purge-qdrant-orphans
+uv run python maintenance_cli.py reset-all
+```
+
+Notes:
+
+- `reset-all` creates backup copies of `knowledge_bases.json`, `documents.json`, and `chunks.jsonl` by default.
+- Use `--no-backup` only when you explicitly want a destructive reset with no local metadata backup.
+- When running the CLI from the host instead of inside Docker, ensure `QDRANT_URL` points to the host-exposed service, typically `http://localhost:6333`.
 
 ## 📚 Documentation
 

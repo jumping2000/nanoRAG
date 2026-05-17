@@ -4,8 +4,10 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 BASE_DIR = Path(__file__).resolve().parent
+AppEnvironment = Literal["development", "production", "debug"]
 
 
 def _csv_env(name: str, default: str) -> tuple[str, ...]:
@@ -13,10 +15,19 @@ def _csv_env(name: str, default: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in raw.split(",") if part.strip())
 
 
+def _read_environment() -> AppEnvironment:
+    value = os.getenv("APP_ENV", "development").strip().lower()
+    if value in {"development", "production", "debug"}:
+        return value
+    raise ValueError(
+        "APP_ENV must be one of development, production, debug"
+    )
+
+
 @dataclass(slots=True, frozen=True)
 class Settings:
     app_name: str
-    environment: str
+    environment: AppEnvironment
     llm_provider: str
     llm_api_key: str | None
     llm_base_url: str | None
@@ -41,6 +52,26 @@ class Settings:
     graph_store_path: Path
     prompt_path: Path
 
+    @property
+    def is_development(self) -> bool:
+        return self.environment == "development"
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment == "production"
+
+    @property
+    def is_debug(self) -> bool:
+        return self.environment == "debug"
+
+    @property
+    def enable_deep_observability(self) -> bool:
+        return self.environment in {"development", "debug"}
+
+    @property
+    def enable_trace_details(self) -> bool:
+        return self.environment == "debug"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
@@ -64,7 +95,7 @@ def get_settings() -> Settings:
 
     return Settings(
         app_name="nanoRAG",
-        environment=os.getenv("APP_ENV", "development"),
+        environment=_read_environment(),
         llm_provider=llm_provider,
         llm_api_key=os.getenv("LLM_API_KEY"),
         llm_base_url=llm_base_url,

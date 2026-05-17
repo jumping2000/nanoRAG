@@ -25,6 +25,11 @@ class SparseRetriever:
             return len(self._chunks_by_id)
         return len(self._ordered_chunks_by_kb.get(kb_id, []))
 
+    def list_chunks(self, kb_id: str | None = None) -> list[ChunkMetadata]:
+        if kb_id is None:
+            return list(self._chunks_by_id.values())
+        return list(self._ordered_chunks_by_kb.get(kb_id, []))
+
     def upsert(self, chunks: list[ChunkMetadata]) -> None:
         for chunk in chunks:
             self._chunks_by_id[chunk.chunk_id] = chunk

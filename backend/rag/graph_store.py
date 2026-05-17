@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import sqlite3
+import time
 from pathlib import Path
 
 from config import Settings
@@ -14,6 +16,9 @@ from models import (
     GraphSnapshot,
     GraphStats,
 )
+from observability import observe
+
+logger = logging.getLogger(__name__)
 
 
 class GraphStore:
@@ -28,6 +33,7 @@ class GraphStore:
         entities: list[ExtractedEntity],
         relations: list[ExtractedRelation],
     ) -> None:
+        started = time.perf_counter()
         with self._connect() as connection:
             connection.execute(
                 "DELETE FROM entity_mentions WHERE kb_id = ? AND chunk_id = ?",
@@ -97,24 +103,59 @@ class GraphStore:
                     """,
                     relation_rows,
                 )
+        observe(
+            logger,
+            logging.DEBUG,
+            "graph_store",
+            "chunk.replaced",
+            kb_id=chunk.kb_id,
+            chunk_id=chunk.chunk_id,
+            entities=len(entities),
+            relations=len(relations),
+            elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
 
     def delete_document(self, kb_id: str, document_id: str) -> None:
+        started = time.perf_counter()
         with self._connect() as connection:
-            connection.execute(
+            entity_cursor = connection.execute(
                 "DELETE FROM entity_mentions WHERE kb_id = ? AND document_id = ?",
                 (kb_id, document_id),
             )
-            connection.execute(
+            relation_cursor = connection.execute(
                 "DELETE FROM relation_mentions WHERE kb_id = ? AND document_id = ?",
                 (kb_id, document_id),
             )
+        observe(
+            logger,
+            logging.DEBUG,
+            "graph_store",
+            "document.deleted",
+            kb_id=kb_id,
+            document_id=document_id,
+            entity_rows=entity_cursor.rowcount,
+            relation_rows=relation_cursor.rowcount,
+            elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
 
     def delete_kb(self, kb_id: str) -> None:
+        started = time.perf_counter()
         with self._connect() as connection:
-            connection.execute("DELETE FROM entity_mentions WHERE kb_id = ?", (kb_id,))
-            connection.execute("DELETE FROM relation_mentions WHERE kb_id = ?", (kb_id,))
+            entity_cursor = connection.execute("DELETE FROM entity_mentions WHERE kb_id = ?", (kb_id,))
+            relation_cursor = connection.execute("DELETE FROM relation_mentions WHERE kb_id = ?", (kb_id,))
+        observe(
+            logger,
+            logging.DEBUG,
+            "graph_store",
+            "kb.deleted",
+            kb_id=kb_id,
+            entity_rows=entity_cursor.rowcount,
+            relation_rows=relation_cursor.rowcount,
+            elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
 
     def get_snapshot(self, kb_id: str, limit: int = 18, min_weight: int = 1) -> GraphSnapshot:
+        started = time.perf_counter()
         with self._connect() as connection:
             entity_rows = connection.execute(
                 """
@@ -213,7 +254,7 @@ class GraphStore:
             key=lambda node: (-node.mentions, node.label),
         )
 
-        return GraphSnapshot(
+        snapshot = GraphSnapshot(
             kb_id=kb_id,
             nodes=nodes,
             edges=sorted_edges,
@@ -223,6 +264,21 @@ class GraphStore:
                 mentions=len(entity_rows),
             ),
         )
+        observe(
+            logger,
+            logging.DEBUG,
+            "graph_store",
+            "snapshot.loaded",
+            kb_id=kb_id,
+            limit=limit,
+            min_weight=min_weight,
+            entity_rows=len(entity_rows),
+            relation_rows=len(relation_rows),
+            nodes=snapshot.stats.nodes,
+            edges=snapshot.stats.edges,
+            elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+        return snapshot
 
     def _initialize(self) -> None:
         with self._connect() as connection:

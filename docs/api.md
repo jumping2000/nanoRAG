@@ -1,5 +1,13 @@
 # API
 
+## Response headers
+
+All endpoints return `X-Request-ID`.
+
+When the backend runs with `APP_ENV=development` or `APP_ENV=debug`, responses also include `X-Debug-Trace-Mode`.
+
+When the backend runs with `APP_ENV=debug`, responses may additionally include `X-Debug-Trace-Events` with the current trace event count.
+
 ## `GET /health`
 
 Returns basic service status.
@@ -132,5 +140,8 @@ Possible event stream frames:
 {"type":"meta","searchQuery":"SOA backplane architecture","matches":6}
 {"type":"token","content":"The architecture ..."}
 {"type":"sources","sources":[{"chunk_id":"...","kb_id":"finance","document_id":"finance-risk-report-1a2b3c4d5e6f","filename":"doc.pdf","page":3,"section":"Overview","score":0.03}]}
+{"type":"debug","trace":{"requestId":"...","environment":"debug","elapsedMs":42.5,"events":[{"at":"2026-05-17T12:00:00+00:00","component":"api","action":"chat.context.ready","details":{"kb_id":"finance","matches":6}}]}}
 {"type":"done"}
 ```
+
+The `debug` event is emitted only when `APP_ENV=debug`.
