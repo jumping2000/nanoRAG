@@ -10,6 +10,7 @@ nanoRAG is designed for teams that want a clean RAG system without unnecessary i
 - 🔎 Hybrid retrieval with dense search + BM25 + RRF
 - 🗂️ Multi-knowledge-base support with KB-scoped chat and uploads
 - 🧱 Single shared Qdrant collection filtered by `kb_id`
+- 🔌 MCP server for agentic access from Claude Desktop, VS Code Copilot, and other MCP clients
 - 💻 CPU-friendly backend, including CPU-only PyTorch setup
 - 🌊 Streaming chat responses over NDJSON
 - 🛡️ No raw PDF/TXT/MD retention after ingestion, only chunks and metadata
@@ -143,6 +144,29 @@ Main endpoints:
 
 See the full API reference in [docs/api.md](docs/api.md).
 
+### MCP server
+
+nanoRAG also exposes a **Model Context Protocol** server for agentic access:
+
+- 8 MCP tools for KB inspection, chat, graph exploration, and document management
+- Same runtime as the REST API — shared retrieval, graph store, and agents
+- Streamable HTTP transport on port `8100`
+
+Connect Claude Desktop or VS Code Copilot:
+
+```json
+{
+  "mcpServers": {
+    "nanoRAG": {
+      "transport": "streamable-http",
+      "url": "http://localhost:8100/mcp"
+    }
+  }
+}
+```
+
+See the full MCP reference in [docs/mcp-server.md](docs/mcp-server.md).
+
 ## 🧪 Validation
 
 Backend tests:
@@ -197,6 +221,8 @@ Notes:
 - [docs/frontend.md](docs/frontend.md)
 - [docs/hybrid-search.md](docs/hybrid-search.md)
 - [docs/providers.md](docs/providers.md)
+- [docs/mcp-server.md](docs/mcp-server.md)
+- [graph-retrieval-next-step.md](graph-retrieval-next-step.md)
 
 ## 🎯 Design goals
 

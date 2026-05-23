@@ -12,9 +12,9 @@ backend/data/knowledge_bases.json
 backend/data/knowledge_graph.db
 frontend/node_modules/
 frontend/.next/
+docs/change_requests/
+.github/agents/
+.github/copilot-instructions.md
 .venv/
 .env
-AGENTS.md
 prompt.txt
-graph_evolution.md
-graph_augmented_agentic_rag_plan.md

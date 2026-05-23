@@ -22,6 +22,7 @@ dependencies = [
   "ollama>=0.4.0",
   "tiktoken>=0.7.0",
   "torch>=2.8.0,<3.0.0",
+  "mcp>=1.0.0",
 ]
 
 [dependency-groups]
