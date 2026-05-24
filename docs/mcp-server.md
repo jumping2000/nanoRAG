@@ -8,28 +8,64 @@ nanoRAG exposes a Model Context Protocol (MCP) server that lets external AI agen
 
 ```bash
 cd backend
-uv sync
-uv run mcp dev mcp_server.py
+uv run api.main:app --reload
 ```
 
 ### Docker
 
+Run the backend service; the backend will start MCP as a subprocess and expose `/mcp` over HTTP.
+
 ```bash
-docker compose up -d mcp
+docker compose up -d backend
 ```
 
-The MCP server listens on `http://localhost:8100/mcp` with streamable HTTP transport.
+The backend provides an HTTP proxy at `http://localhost:8000/mcp` (streamable HTTP for external clients).
+
+### Debug / standalone MCP
+
+If you need to run the MCP server by itself for debugging, you can start the MCP process directly. This runs the FastMCP app using the `stdio` transport and is useful when developing MCP tools:
+
+```bash
+# from repository root
+python backend/mcp_server_start.py
+```
+
+Alternatively run the backend (which will start the MCP subprocess for you):
+
+```bash
+cd backend
+uv run api.main:app --reload
+```
+
+Example: call `nanorag_chat` via the backend proxy (non-streaming JSON response):
+
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"kb_id":"arch-new","message":"fai un breve riassunto della architettura soa"}' \
+  http://localhost:8000/mcp/nanorag_chat
+```
+
+Example: request a streaming NDJSON response (accept header):
+
+```bash
+curl -X POST \
+  -H "Accept: application/x-ndjson" \
+  -H "Content-Type: application/json" \
+  -d '{"kb_id":"arch-new","message":"fai un breve riassunto della architettura soa"}' \
+  http://localhost:8000/mcp/nanorag_chat
+```
 
 ### Connect from Claude Desktop
 
-Add to `claude_desktop_config.json`:
+Add to `claude_desktop_config.json` (point to the backend proxy):
 
 ```json
 {
   "mcpServers": {
     "nanoRAG": {
-      "transport": "streamable-http",
-      "url": "http://localhost:8100/mcp"
+      "transport": "stdio",
+      "url": "http://localhost:8000/mcp"
     }
   }
 }
@@ -37,14 +73,14 @@ Add to `claude_desktop_config.json`:
 
 ### Connect from VS Code Copilot
 
-Add to `.vscode/mcp.json` or the Copilot MCP settings:
+Add to `.vscode/mcp.json` or the Copilot MCP settings (point to the backend proxy):
 
 ```json
 {
   "mcpServers": {
     "nanoRAG": {
-      "transport": "streamable-http",
-      "url": "http://localhost:8100/mcp"
+      "transport": "stdio",
+      "url": "http://localhost:8000/mcp"
     }
   }
 }
@@ -192,9 +228,9 @@ The MCP server shares the same runtime singletons as the FastAPI backend:
 
 ```
 MCP Agent Client
-    ↓
-FastMCP (streamable HTTP, port 8100)
-    ↓
+  ↓
+Backend `/mcp` HTTP proxy (port 8000) → forwards to MCP subprocess (stdio)
+  ↓
 build_ingestion_runtime(settings)
     ├── DenseRetriever
     ├── SparseRetriever

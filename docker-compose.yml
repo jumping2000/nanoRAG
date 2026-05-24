@@ -15,7 +15,7 @@ x-backend-env: &backend-env
   CHUNK_SIZE_TOKENS: ${CHUNK_SIZE_TOKENS:-450}
   CHUNK_OVERLAP_TOKENS: ${CHUNK_OVERLAP_TOKENS:-80}
   CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://frontend:3000}
-
+  MCP_API_KEY: ${MCP_API_KEY:-changeme}
 services:
   qdrant:
     image: qdrant/qdrant:v1.17.1
@@ -52,9 +52,9 @@ services:
           "-c",
           "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
         ]
-      interval: 15s
+      interval: 30s
       timeout: 5s
-      retries: 12
+      retries: 6
 
   frontend:
     container_name: nanorag-web
@@ -76,36 +76,11 @@ services:
           "-e",
           "fetch('http://127.0.0.1:3000').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
-      interval: 15s
+      interval: 30s
       timeout: 5s
-      retries: 12
+      retries: 6
 
-  mcp:
-    container_name: nanorag-mcp
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    environment:
-      <<: *backend-env
-    ports:
-      - "8100:8100"
-    command: uv run python mcp_server_start.py
-    volumes:
-      - ./backend/data:/app/data
-    depends_on:
-      qdrant:
-        condition: service_healthy
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 12
+  # MCP is run as a subprocess inside the `backend` container (stdio transport).
 
 volumes:
   qdrant_data:

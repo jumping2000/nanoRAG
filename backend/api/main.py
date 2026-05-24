@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# MCP_SUBPROCESS_IMPORT_FIXED
+
 import json
 import logging
 import time
@@ -7,6 +9,11 @@ from uuid import uuid4
 from collections.abc import Iterator
 
 from fastapi import FastAPI, File, Query, Request, UploadFile
+import os
+import json
+import asyncio
+from fastapi.responses import StreamingResponse, JSONResponse
+from mcp_subprocess import AsyncMCPSubprocess
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -267,3 +274,64 @@ def chat(request: ChatRequest) -> StreamingResponse:
 
 def _event(payload: dict[str, object]) -> str:
     return json.dumps(payload, ensure_ascii=False) + "\n"
+
+
+# ---- MCP stdio bridge: start subprocess and proxy /mcp requests ----
+mcp_manager: AsyncMCPSubprocess | None = None
+
+
+@app.on_event("startup")
+async def _start_mcp_subprocess():
+    global mcp_manager
+    mcp_manager = AsyncMCPSubprocess()
+    await mcp_manager.start()
+
+
+@app.on_event("shutdown")
+async def _stop_mcp_subprocess():
+    global mcp_manager
+    if mcp_manager is not None:
+        await mcp_manager.stop()
+
+
+@app.api_route('/mcp/{path:path}', methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+async def mcp_proxy(path: str, request: Request):
+    """Proxy HTTP requests to MCP subprocess over stdio.
+
+    Expects MCP messages framed as NDJSON with an `id` field. Authorization via `X-API-Key` header.
+    """
+    api_key = os.getenv('MCP_API_KEY')
+    header = request.headers.get('x-api-key')
+    if api_key and header != api_key:
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+
+    if mcp_manager is None:
+        return JSONResponse(status_code=503, content={"detail": "MCP subprocess not started"})
+
+    # Determine tool name and params
+    tool_name = path.strip('/') or 'nanorag_health'
+    params = {}
+    if request.method in ("POST", "PUT", "PATCH"):
+        try:
+            raw_body = await request.body()
+            params = json.loads(raw_body) if raw_body else {}
+        except Exception:
+            params = {}
+    else:
+        params = dict(request.query_params)
+
+    accept = request.headers.get('accept', '')
+    stream = 'application/x-ndjson' in accept
+
+    try:
+        if stream:
+            agen = await mcp_manager.call_tool(tool_name, params, stream=True)
+            return StreamingResponse(agen, media_type='application/x-ndjson')
+        else:
+            res = await mcp_manager.call_tool(tool_name, params, stream=False)
+            # If the subprocess returned an object with 'result', unwrap it
+            if isinstance(res, dict) and 'result' in res:
+                return JSONResponse(content=res['result'])
+            return JSONResponse(content=res)
+    except Exception as exc:
+        return JSONResponse(status_code=502, content={"detail": str(exc)})

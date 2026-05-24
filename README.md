@@ -146,20 +146,19 @@ See the full API reference in [docs/api.md](docs/api.md).
 
 ### MCP server
 
-nanoRAG also exposes a **Model Context Protocol** server for agentic access:
+nanoRAG exposes a **Model Context Protocol** surface for agentic access. The MCP server runs as a subprocess inside the backend and communicates over `stdio` (NDJSON-framed JSON-RPC). The FastAPI backend starts the subprocess and provides an HTTP proxy at `/mcp` so external MCP clients can connect to the backend.
 
 - 8 MCP tools for KB inspection, chat, graph exploration, and document management
 - Same runtime as the REST API — shared retrieval, graph store, and agents
-- Streamable HTTP transport on port `8100`
+- MCP subprocess transport: `stdio` (backend proxies HTTP clients at `/mcp`)
 
-Connect Claude Desktop or VS Code Copilot:
+Connect Claude Desktop or VS Code Copilot (point at the backend proxy):
 
 ```json
 {
   "mcpServers": {
     "nanoRAG": {
-      "transport": "streamable-http",
-      "url": "http://localhost:8100/mcp"
+      "url": "http://localhost:8000/mcp"
     }
   }
 }
