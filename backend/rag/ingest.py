@@ -6,7 +6,7 @@ from io import BytesIO
 from pathlib import Path
 import time
 
-from fastapi import HTTPException, UploadFile
+from fastapi import BackgroundTasks, HTTPException, UploadFile
 from pypdf import PdfReader
 
 from chunking.structural_chunker import StructuralChunker
@@ -44,6 +44,14 @@ class IngestionService:
         self.graph_store = graph_store
 
     async def ingest_upload(self, kb_id: str, upload: UploadFile) -> UploadResponse:
+        return await self._ingest_upload(kb_id, upload)
+
+    async def _ingest_upload(
+        self,
+        kb_id: str,
+        upload: UploadFile,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> UploadResponse:
         started = time.perf_counter()
         kb = self.catalog.get_kb(kb_id)
         filename = Path(upload.filename or "document").name
@@ -68,21 +76,7 @@ class IngestionService:
 
         self.dense_retriever.upsert(chunks)
         self.sparse_retriever.upsert(chunks)
-        for chunk in chunks:
-            try:
-                entities, relations = self.graph_extractor.extract(chunk)
-                self.graph_store.replace_chunk(chunk, entities, relations)
-            except Exception as error:
-                observe(
-                    logger,
-                    logging.WARNING,
-                    "ingest",
-                    "graph_extract.failed",
-                    kb_id=kb.id,
-                    chunk_id=chunk.chunk_id,
-                    reason=type(error).__name__,
-                )
-                continue
+
         self.catalog.upsert_document(
             DocumentRecord(
                 document_id=document_id,
@@ -93,6 +87,21 @@ class IngestionService:
                 created_at=datetime.now(UTC).isoformat(),
             ),
         )
+
+        if background_tasks is not None and self.settings.graph_extraction_enabled:
+            background_tasks.add_task(self._extract_graph_chunks, kb.id, document_id, chunks)
+            observe(
+                logger,
+                logging.INFO,
+                "ingest",
+                "graph_extract.queued",
+                kb_id=kb.id,
+                document_id=document_id,
+                chunks=len(chunks),
+            )
+        else:
+            self._extract_graph_chunks(kb.id, document_id, chunks)
+
         observe(
             logger,
             logging.INFO,
@@ -111,6 +120,45 @@ class IngestionService:
             filename=filename,
             ingested_chunks=len(chunks),
         )
+
+    def _extract_graph_chunks(
+        self,
+        kb_id: str,
+        document_id: str,
+        chunks: list,
+    ) -> None:
+        graph_chunks = chunks
+
+        if self.settings.graph_extraction_enabled:
+            graph_chunks = chunks[: self.settings.graph_extraction_max_chunks_per_document]
+            skipped_chunks = len(chunks) - len(graph_chunks)
+            if skipped_chunks > 0:
+                observe(
+                    logger,
+                    logging.INFO,
+                    "ingest",
+                    "graph_extract.capped",
+                    kb_id=kb_id,
+                    document_id=document_id,
+                    extracted_chunks=len(graph_chunks),
+                    skipped_chunks=skipped_chunks,
+                )
+
+        for chunk in graph_chunks:
+            try:
+                entities, relations = self.graph_extractor.extract(chunk)
+                self.graph_store.replace_chunk(chunk, entities, relations)
+            except Exception as error:
+                observe(
+                    logger,
+                    logging.WARNING,
+                    "ingest",
+                    "graph_extract.failed",
+                    kb_id=kb_id,
+                    chunk_id=chunk.chunk_id,
+                    reason=type(error).__name__,
+                )
+                continue
 
     def indexed_chunks(self) -> int:
         return self.sparse_retriever.total_chunks()

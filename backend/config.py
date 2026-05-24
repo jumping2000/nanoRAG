@@ -6,13 +6,31 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent
 AppEnvironment = Literal["development", "production", "debug"]
+WORKSPACE_ENV_PATH = BASE_DIR.parent / ".env"
+
+load_dotenv(WORKSPACE_ENV_PATH, override=False)
 
 
 def _csv_env(name: str, default: str) -> tuple[str, ...]:
     raw = os.getenv(name, default)
     return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean value")
 
 
 def _read_environment() -> AppEnvironment:
@@ -51,6 +69,14 @@ class Settings:
     documents_store_path: Path
     graph_store_path: Path
     prompt_path: Path
+    graph_extraction_enabled: bool
+    graph_extraction_provider: str
+    graph_extraction_api_key: str | None
+    graph_extraction_base_url: str | None
+    graph_extraction_model: str
+    graph_extraction_max_chunks_per_document: int
+    graph_extraction_min_confidence: float
+    graph_extraction_prompt_path: Path
 
     @property
     def is_development(self) -> bool:
@@ -93,6 +119,20 @@ def get_settings() -> Settings:
     if not embedding_base_url and embedding_provider == "openai":
         embedding_base_url = llm_base_url
 
+    graph_extraction_provider = os.getenv("GRAPH_EXTRACTION_PROVIDER", llm_provider).strip().lower()
+    graph_extraction_api_key = os.getenv("GRAPH_EXTRACTION_API_KEY")
+    if not graph_extraction_api_key and graph_extraction_provider == llm_provider:
+        graph_extraction_api_key = os.getenv("LLM_API_KEY")
+
+    graph_extraction_base_url = os.getenv("GRAPH_EXTRACTION_BASE_URL")
+    if not graph_extraction_base_url:
+        if graph_extraction_provider == llm_provider:
+            graph_extraction_base_url = llm_base_url
+        elif graph_extraction_provider == "openrouter":
+            graph_extraction_base_url = "https://openrouter.ai/api/v1"
+
+    graph_extraction_model = os.getenv("GRAPH_EXTRACTION_MODEL", os.getenv("LLM_MODEL", "gpt-4o-mini")).strip()
+
     return Settings(
         app_name="nanoRAG",
         environment=_read_environment(),
@@ -122,4 +162,12 @@ def get_settings() -> Settings:
         documents_store_path=data_dir / "documents.json",
         graph_store_path=data_dir / "knowledge_graph.db",
         prompt_path=BASE_DIR / "prompts" / "system.md",
+        graph_extraction_enabled=_bool_env("GRAPH_EXTRACTION_ENABLED", False),
+        graph_extraction_provider=graph_extraction_provider,
+        graph_extraction_api_key=graph_extraction_api_key,
+        graph_extraction_base_url=graph_extraction_base_url,
+        graph_extraction_model=graph_extraction_model,
+        graph_extraction_max_chunks_per_document=max(0, int(os.getenv("GRAPH_EXTRACTION_MAX_CHUNKS_PER_DOCUMENT", "24"))),
+        graph_extraction_min_confidence=min(1.0, max(0.0, float(os.getenv("GRAPH_EXTRACTION_MIN_CONFIDENCE", "0.55")))),
+        graph_extraction_prompt_path=BASE_DIR / "prompts" / "graph_extraction.md",
     )

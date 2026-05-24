@@ -12,6 +12,9 @@ from models import (
     ExtractedRelation,
     GraphEdge,
     GraphEvidence,
+    GraphNodeDetail,
+    GraphNodeDocument,
+    GraphNodeRelation,
     GraphNode,
     GraphSnapshot,
     GraphStats,
@@ -26,6 +29,94 @@ class GraphStore:
         self.path = Path(settings.graph_store_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
+
+    def get_chunk_graph_summary(
+        self,
+        kb_id: str,
+        chunk_ids: list[str],
+        min_confidence: float = 0.0,
+    ) -> dict[str, dict[str, float | int]]:
+        started = time.perf_counter()
+        ordered_chunk_ids = list(dict.fromkeys(chunk_ids))
+        if not ordered_chunk_ids:
+            return {}
+
+        placeholders = ", ".join("?" for _ in ordered_chunk_ids)
+        entity_params: list[object] = [kb_id, *ordered_chunk_ids, float(min_confidence)]
+        relation_params: list[object] = [kb_id, *ordered_chunk_ids, float(min_confidence)]
+        summaries: dict[str, dict[str, float | int]] = {
+            chunk_id: {
+                "entity_count": 0,
+                "entity_confidence_sum": 0.0,
+                "relation_count": 0,
+                "relation_confidence_sum": 0.0,
+            }
+            for chunk_id in ordered_chunk_ids
+        }
+
+        with self._connect() as connection:
+            entity_rows = connection.execute(
+                f"""
+                SELECT chunk_id, COUNT(*) AS entity_count, COALESCE(SUM(confidence), 0.0) AS entity_confidence_sum
+                FROM entity_mentions
+                WHERE kb_id = ? AND chunk_id IN ({placeholders}) AND confidence >= ?
+                GROUP BY chunk_id
+                """,
+                entity_params,
+            ).fetchall()
+            relation_rows = connection.execute(
+                f"""
+                SELECT chunk_id, COUNT(*) AS relation_count, COALESCE(SUM(confidence), 0.0) AS relation_confidence_sum
+                FROM relation_mentions
+                WHERE kb_id = ? AND chunk_id IN ({placeholders}) AND confidence >= ?
+                GROUP BY chunk_id
+                """,
+                relation_params,
+            ).fetchall()
+
+        for row in entity_rows:
+            chunk_id = str(row["chunk_id"])
+            bucket = summaries.setdefault(
+                chunk_id,
+                {
+                    "entity_count": 0,
+                    "entity_confidence_sum": 0.0,
+                    "relation_count": 0,
+                    "relation_confidence_sum": 0.0,
+                },
+            )
+            bucket["entity_count"] = int(row["entity_count"])
+            bucket["entity_confidence_sum"] = float(row["entity_confidence_sum"] or 0.0)
+
+        for row in relation_rows:
+            chunk_id = str(row["chunk_id"])
+            bucket = summaries.setdefault(
+                chunk_id,
+                {
+                    "entity_count": 0,
+                    "entity_confidence_sum": 0.0,
+                    "relation_count": 0,
+                    "relation_confidence_sum": 0.0,
+                },
+            )
+            bucket["relation_count"] = int(row["relation_count"])
+            bucket["relation_confidence_sum"] = float(row["relation_confidence_sum"] or 0.0)
+
+        observe(
+            logger,
+            logging.DEBUG,
+            "graph_store",
+            "chunk_summary.loaded",
+            kb_id=kb_id,
+            chunk_count=len(ordered_chunk_ids),
+            chunks_with_signal=sum(
+                1
+                for bucket in summaries.values()
+                if int(bucket["entity_count"]) > 0 or int(bucket["relation_count"]) > 0
+            ),
+            elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+        return summaries
 
     def replace_chunk(
         self,
@@ -280,6 +371,147 @@ class GraphStore:
         )
         return snapshot
 
+    def get_node_detail(self, kb_id: str, entity_id: str, evidence_limit: int = 12) -> GraphNodeDetail:
+        started = time.perf_counter()
+        with self._connect() as connection:
+            entity_rows = connection.execute(
+                """
+                SELECT entity_id, label, entity_type, confidence, filename, page, section, snippet, document_id, chunk_id
+                FROM entity_mentions
+                WHERE kb_id = ? AND entity_id = ?
+                ORDER BY rowid ASC
+                """,
+                (kb_id, entity_id),
+            ).fetchall()
+            relation_rows = connection.execute(
+                """
+                SELECT edge_id, source_id, source_label, source_type, predicate, target_id, target_label,
+                       target_type, confidence, filename, page, section, snippet, document_id, chunk_id
+                FROM relation_mentions
+                WHERE kb_id = ? AND (source_id = ? OR target_id = ?)
+                ORDER BY rowid ASC
+                """,
+                (kb_id, entity_id, entity_id),
+            ).fetchall()
+
+        if not entity_rows:
+            raise LookupError(f"Graph node not found: {entity_id}")
+
+        label_counts: dict[str, int] = {}
+        type_counts: dict[str, int] = {}
+        documents_by_id: dict[str, GraphNodeDocument] = {}
+        for row in entity_rows:
+            label = str(row["label"])
+            entity_type = str(row["entity_type"])
+            label_counts[label] = label_counts.get(label, 0) + 1
+            type_counts[entity_type] = type_counts.get(entity_type, 0) + 1
+
+            document_id = str(row["document_id"])
+            document = documents_by_id.get(document_id)
+            if document is None:
+                documents_by_id[document_id] = GraphNodeDocument(
+                    document_id=document_id,
+                    filename=str(row["filename"]),
+                    mention_count=1,
+                )
+            else:
+                document.mention_count += 1
+
+        node = GraphNode(
+            id=entity_id,
+            label=self._top_key(label_counts),
+            entity_type=self._top_key(type_counts),
+            mentions=len(entity_rows),
+        )
+
+        relation_buckets: dict[tuple[str, str, str], dict[str, object]] = {}
+        for row in relation_rows:
+            is_outgoing = str(row["source_id"]) == entity_id
+            direction = "outgoing" if is_outgoing else "incoming"
+            counterpart_id = str(row["target_id"] if is_outgoing else row["source_id"])
+            counterpart_label = str(row["target_label"] if is_outgoing else row["source_label"])
+            counterpart_type = str(row["target_type"] if is_outgoing else row["source_type"])
+            key = (direction, str(row["predicate"]), counterpart_id)
+            bucket = relation_buckets.setdefault(
+                key,
+                {
+                    "edge_id": str(row["edge_id"]),
+                    "weight": 0,
+                    "counterpart_label_counts": {},
+                    "counterpart_type_counts": {},
+                    "evidence": [],
+                },
+            )
+            bucket["weight"] = int(bucket["weight"]) + 1
+
+            label_bucket = bucket["counterpart_label_counts"]
+            type_bucket = bucket["counterpart_type_counts"]
+            evidence = bucket["evidence"]
+            assert isinstance(label_bucket, dict)
+            assert isinstance(type_bucket, dict)
+            assert isinstance(evidence, list)
+            label_bucket[counterpart_label] = label_bucket.get(counterpart_label, 0) + 1
+            type_bucket[counterpart_type] = type_bucket.get(counterpart_type, 0) + 1
+            if len(evidence) < evidence_limit:
+                evidence.append(
+                    GraphEvidence(
+                        chunk_id=str(row["chunk_id"]),
+                        document_id=str(row["document_id"]),
+                        filename=str(row["filename"]),
+                        page=row["page"],
+                        section=row["section"],
+                        snippet=str(row["snippet"]),
+                        confidence=float(row["confidence"]),
+                    )
+                )
+
+        relations = sorted(
+            (
+                GraphNodeRelation(
+                    edge_id=str(bucket["edge_id"]),
+                    predicate=predicate,
+                    direction=direction,
+                    counterpart=GraphNode(
+                        id=counterpart_id,
+                        label=self._top_key(bucket["counterpart_label_counts"]),
+                        entity_type=self._top_key(bucket["counterpart_type_counts"]),
+                        mentions=0,
+                    ),
+                    weight=int(bucket["weight"]),
+                    evidence=list(bucket["evidence"]),
+                )
+                for (direction, predicate, counterpart_id), bucket in relation_buckets.items()
+            ),
+            key=lambda relation: (-relation.weight, relation.predicate, relation.counterpart.label),
+        )
+        documents = sorted(
+            documents_by_id.values(),
+            key=lambda document: (-document.mention_count, document.filename, document.document_id),
+        )
+        detail = GraphNodeDetail(
+            node=node,
+            relations=relations,
+            documents=documents,
+            stats={
+                "mentions": node.mentions,
+                "documents": len(documents),
+                "relations": len(relations),
+            },
+        )
+        observe(
+            logger,
+            logging.DEBUG,
+            "graph_store",
+            "node_detail.loaded",
+            kb_id=kb_id,
+            entity_id=entity_id,
+            mentions=detail.stats["mentions"],
+            documents=detail.stats["documents"],
+            relations=detail.stats["relations"],
+            elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+        return detail
+
     def _initialize(self) -> None:
         with self._connect() as connection:
             connection.executescript(
@@ -318,9 +550,15 @@ class GraphStore:
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_entity_mentions_kb ON entity_mentions (kb_id);
+                CREATE INDEX IF NOT EXISTS idx_entity_mentions_chunk ON entity_mentions (kb_id, chunk_id);
                 CREATE INDEX IF NOT EXISTS idx_entity_mentions_document ON entity_mentions (kb_id, document_id);
+                CREATE INDEX IF NOT EXISTS idx_entity_mentions_entity ON entity_mentions (kb_id, entity_id);
                 CREATE INDEX IF NOT EXISTS idx_relation_mentions_kb ON relation_mentions (kb_id);
+                CREATE INDEX IF NOT EXISTS idx_relation_mentions_chunk ON relation_mentions (kb_id, chunk_id);
                 CREATE INDEX IF NOT EXISTS idx_relation_mentions_document ON relation_mentions (kb_id, document_id);
+                CREATE INDEX IF NOT EXISTS idx_relation_mentions_source ON relation_mentions (kb_id, source_id);
+                CREATE INDEX IF NOT EXISTS idx_relation_mentions_target ON relation_mentions (kb_id, target_id);
+                CREATE INDEX IF NOT EXISTS idx_relation_mentions_edge ON relation_mentions (kb_id, edge_id);
                 """
             )
 

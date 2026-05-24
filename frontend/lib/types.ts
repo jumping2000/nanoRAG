@@ -73,6 +73,21 @@ export type GraphEdge = {
   evidence: GraphEvidence[];
 };
 
+export type GraphNodeRelation = {
+  edge_id: string;
+  predicate: string;
+  direction: "incoming" | "outgoing";
+  counterpart: GraphNode;
+  weight: number;
+  evidence: GraphEvidence[];
+};
+
+export type GraphNodeDocument = {
+  document_id: string;
+  filename: string;
+  mention_count: number;
+};
+
 export type GraphStats = {
   nodes: number;
   edges: number;
@@ -84,4 +99,11 @@ export type GraphSnapshot = {
   nodes: GraphNode[];
   edges: GraphEdge[];
   stats: GraphStats;
+};
+
+export type GraphNodeDetail = {
+  node: GraphNode;
+  relations: GraphNodeRelation[];
+  documents: GraphNodeDocument[];
+  stats: Record<string, number>;
 };
