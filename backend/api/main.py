@@ -263,6 +263,10 @@ def chat(request: ChatRequest) -> StreamingResponse:
     if settings.graph_retrieval_enabled:
         from retrieval.graph_search import GraphRetriever
         graph_retriever = GraphRetriever(graph_store, sparse_retriever)
+        # Ensure entity lookup even without query expansion enabled
+        if expander is None:
+            from retrieval.graph_query_expander import GraphQueryExpander as _QE
+            expander = _QE(graph_store, max_terms=0)
 
     chunks = hybrid_retriever.search(
         plan.search_query,

@@ -56,7 +56,7 @@ class GraphRetriever:
             logger,
             logging.INFO,
             "retrieval",
-            "graph_retrieval.completed",
+            "graph_retrieval.candidates_found",
             kb_id=kb_id,
             seeds=len(seed_entities),
             candidates=len(scored),
