@@ -1,42 +1,202 @@
 [
   {
-    "document_id": "test-architettura-sistemi-dipartimentali-midrange-c5059207a980",
-    "kb_id": "test",
-    "kb_name": "test",
-    "filename": "Architettura Sistemi Dipartimentali Midrange.pdf",
-    "chunk_count": 12,
-    "created_at": "2026-05-10T19:39:23.144644+00:00"
+    "document_id": "arch-new-architettura-applicativa---asis-6ed4f5254b61",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Architettura Applicativa - AsIs.pdf",
+    "chunk_count": 39,
+    "created_at": "2026-05-17T17:31:57.236214+00:00"
   },
   {
-    "document_id": "test-architettura-soa---soa-backplane---guida-operativa---contesto-lite-7e92403f125f",
-    "kb_id": "test",
-    "kb_name": "test",
+    "document_id": "arch-new-architettura-applicativa---blueprint---overview-9bd2bef4ac5f",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Architettura Applicativa - BluePrint - Overview.pdf",
+    "chunk_count": 14,
+    "created_at": "2026-05-17T17:32:11.057201+00:00"
+  },
+  {
+    "document_id": "arch-new-architettura-applicativa---linee-guida---rest-api-1f446df8871c",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Architettura Applicativa - Linee guida - REST API.pdf",
+    "chunk_count": 78,
+    "created_at": "2026-05-17T17:33:03.674655+00:00"
+  },
+  {
+    "document_id": "arch-new-architettura-applicativa---linee-guida---single-page-application-b6fd5cf22959",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Architettura Applicativa - Linee guida - Single Page Application.pdf",
+    "chunk_count": 24,
+    "created_at": "2026-05-17T17:33:25.794723+00:00"
+  },
+  {
+    "document_id": "arch-new-architettura-di-sviluppo---linee-guida---dati-ambienti-di-test-685cb360cfbf",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Architettura di Sviluppo - Linee Guida - Dati Ambienti di Test.pdf",
+    "chunk_count": 8,
+    "created_at": "2026-05-17T17:33:30.960831+00:00"
+  },
+  {
+    "document_id": "arch-new-architettura-soa---guida-operativa---broker-wsdl-designer-a56f7c740942",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Architettura SOA - Guida Operativa - Broker WSDL Designer.pdf",
+    "chunk_count": 46,
+    "created_at": "2026-05-17T20:14:10.177557+00:00"
+  },
+  {
+    "document_id": "arch-new-architettura-soa---soa-backplane---guida-operativa---contesto-lite-7e92403f125f",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
     "filename": "Architettura SOA - SOA BackPlane - Guida Operativa - Contesto Lite.pdf",
     "chunk_count": 41,
-    "created_at": "2026-05-10T19:40:23.479626+00:00"
+    "created_at": "2026-05-17T20:15:52.216444+00:00"
   },
   {
-    "document_id": "test-architettura-tecnologica---standard-e-bestpractice---configurazione-di-webserver-apache-4155db172bf3",
-    "kb_id": "test",
-    "kb_name": "test",
+    "document_id": "arch-new-architettura-soa---soa-backplane---guida-operativa---infrastruttura-ggs-4423fd34d70e",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Architettura SOA - SOA BackPlane - Guida Operativa - Infrastruttura GGS.pdf",
+    "chunk_count": 31,
+    "created_at": "2026-05-17T20:16:43.725652+00:00"
+  },
+  {
+    "document_id": "arch-new-architettura-soa---soa-backplane-f5963aabc62e",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Architettura SOA - SOA Backplane.pdf",
+    "chunk_count": 9,
+    "created_at": "2026-05-17T20:17:00.258485+00:00"
+  },
+  {
+    "document_id": "arch-new-architettura-soa-e-data-governance---documento-generale-6dc0d70756af",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Architettura SOA e Data Governance - Documento Generale.pdf",
+    "chunk_count": 39,
+    "created_at": "2026-05-17T20:17:51.349811+00:00"
+  },
+  {
+    "document_id": "arch-new-architettura-tecnologica---standard-e-bestpractice---configurazione-di-webserver-apache-4155db172bf3",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
     "filename": "Architettura Tecnologica - Standard e BestPractice - Configurazione di WebServer Apache.pdf",
     "chunk_count": 9,
-    "created_at": "2026-05-10T19:40:42.601085+00:00"
+    "created_at": "2026-05-17T20:20:33.214781+00:00"
   },
   {
-    "document_id": "test-architettura_mainframe-09d3adf591b5",
-    "kb_id": "test",
-    "kb_name": "test",
-    "filename": "Architettura_Mainframe.pdf",
-    "chunk_count": 13,
-    "created_at": "2026-05-10T19:41:11.218273+00:00"
+    "document_id": "arch-new-architettura-tecnologica---standard-e-bestpractice---filtro-di-sicurezza-4b3440f8c02c",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Architettura Tecnologica - Standard e BestPractice - Filtro di Sicurezza.pdf",
+    "chunk_count": 43,
+    "created_at": "2026-05-17T20:21:35.737402+00:00"
   },
   {
-    "document_id": "test-architetturacontainers-1cf3ab9fc77b",
-    "kb_id": "test",
-    "kb_name": "test",
-    "filename": "ArchitetturaContainers.pdf",
-    "chunk_count": 13,
-    "created_at": "2026-05-10T19:41:21.665178+00:00"
+    "document_id": "arch-new-architettura-tecnologica---standard-e-bestpractice---integrazione-di-applicazioni-java-con-componenti-infrastrutturali-f36cd382d517",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Architettura Tecnologica - Standard e BestPractice - Integrazione di applicazioni Java con componenti Infrastrutturali.pdf",
+    "chunk_count": 20,
+    "created_at": "2026-05-17T20:21:55.120199+00:00"
+  },
+  {
+    "document_id": "arch-new-sistemi-dipartimentali---guida-operativa---j2eeconfigurator-85d8a5639f1c",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Sistemi Dipartimentali - Guida Operativa - J2EEConfigurator.pdf",
+    "chunk_count": 42,
+    "created_at": "2026-05-17T20:26:04.982644+00:00"
+  },
+  {
+    "document_id": "arch-new-soa-backplane---guida-operativa---esposizione-su-internet-di-servizi-soa-69576778a3da",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "SOA BackPlane - Guida Operativa - Esposizione su Internet di servizi SOA.pdf",
+    "chunk_count": 36,
+    "created_at": "2026-05-17T20:27:54.119173+00:00"
+  },
+  {
+    "document_id": "arch-new-soa-backplane---guida-operativa---log-audit-74ce360da3fd",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "SOA BackPlane - Guida Operativa - Log Audit.pdf",
+    "chunk_count": 40,
+    "created_at": "2026-05-17T20:28:36.765846+00:00"
+  },
+  {
+    "document_id": "arch-new-soa-backplane---guida-operativa---policy-915038f014cb",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "SOA Backplane - Guida Operativa - Policy.pdf",
+    "chunk_count": 26,
+    "created_at": "2026-05-17T20:29:15.312471+00:00"
+  },
+  {
+    "document_id": "arch-new-soa-governance---guida-operativa---catalogo-servizi-wsrr-1bbc503d0a2b",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "SOA Governance - Guida Operativa - Catalogo Servizi WSRR.pdf",
+    "chunk_count": 22,
+    "created_at": "2026-05-17T20:31:04.413013+00:00"
+  },
+  {
+    "document_id": "arch-new-software-lifecycle---best-practice---architettura-delle-applicazioni-2b2ab1754b54",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Software Lifecycle - Best Practice - Architettura delle Applicazioni.pdf",
+    "chunk_count": 114,
+    "created_at": "2026-05-17T20:33:55.881835+00:00"
+  },
+  {
+    "document_id": "arch-new-software-lifecycle---guida-operativa---broker-java-a2f568341f24",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Software Lifecycle - Guida Operativa - Broker Java.pdf",
+    "chunk_count": 20,
+    "created_at": "2026-05-17T20:36:25.862274+00:00"
+  },
+  {
+    "document_id": "arch-new-software-lifecycle--guida-operativa--functional-component-pojo-7db0c5f869e4",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Software Lifecycle  Guida Operativa  Functional Component POJO.pdf",
+    "chunk_count": 20,
+    "created_at": "2026-05-17T20:36:58.822921+00:00"
+  },
+  {
+    "document_id": "arch-new-software-lifecycle---guida-operativa---stampe-ae562cd99980",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Software Lifecycle - Guida Operativa - Stampe.pdf",
+    "chunk_count": 81,
+    "created_at": "2026-05-17T20:38:33.862036+00:00"
+  },
+  {
+    "document_id": "arch-new-software-lifecycle---linee-guida---modalita-di-accesso-ai-dati-c282ffff6761",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Software lifecycle - Linee Guida - Modalita di accesso ai Dati.pdf",
+    "chunk_count": 29,
+    "created_at": "2026-05-17T20:38:51.825685+00:00"
+  },
+  {
+    "document_id": "arch-new-software-lifecycle---linee-guida---sviluppo-componenti-19e6f4083c70",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Software Lifecycle - Linee Guida - Sviluppo Componenti.pdf",
+    "chunk_count": 8,
+    "created_at": "2026-05-17T20:38:57.909007+00:00"
+  },
+  {
+    "document_id": "arch-new-software-lifecycle---standard-e-best-practice---introduzione_a_ejb_3.0-35a3ddb2e2aa",
+    "kb_id": "arch-new",
+    "kb_name": "arch-new",
+    "filename": "Software Lifecycle - Standard e best practice - Introduzione_a_EJB_3.0.pdf",
+    "chunk_count": 38,
+    "created_at": "2026-05-17T20:39:40.878981+00:00"
   }
 ]

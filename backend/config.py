@@ -138,9 +138,9 @@ def get_settings() -> Settings:
     graph_extraction_model = os.getenv("GRAPH_EXTRACTION_MODEL", os.getenv("LLM_MODEL", "gpt-4o-mini")).strip()
 
     graph_query_expansion_enabled = _bool_env("GRAPH_QUERY_EXPANSION_ENABLED", False)
-    graph_query_expansion_max_terms = int(os.getenv("GRAPH_QUERY_EXPANSION_MAX_TERMS", "4"))
+    graph_query_expansion_max_terms = max(1, int(os.getenv("GRAPH_QUERY_EXPANSION_MAX_TERMS", "4")))
     graph_retrieval_enabled = _bool_env("GRAPH_RETRIEVAL_ENABLED", False)
-    graph_retrieval_top_k = int(os.getenv("GRAPH_RETRIEVAL_TOP_K", "6"))
+    graph_retrieval_top_k = max(1, int(os.getenv("GRAPH_RETRIEVAL_TOP_K", "6")))
 
     return Settings(
         app_name="nanoRAG",
