@@ -7,7 +7,8 @@
 nanoRAG is designed for teams that want a clean RAG system without unnecessary infrastructure.
 
 - 🧠 Agentic answer generation with Agno
-- 🔎 Hybrid retrieval with dense search + BM25 + RRF
+- 🔎 Hybrid retrieval with dense search + BM25 + graph retrieval + RRF
+- 🧩 Query expansion from knowledge graph entities (deterministic, no LLM)
 - 🔁 Graph-aware reranking on the `/chat` path
 - 🕸️ Knowledge graph extraction with structured LLM pipeline and KB-scoped inspection
 - 🗺️ Graph node detail API with evidence-backed relation inspection
@@ -35,12 +36,14 @@ The platform keeps retrieval and reasoning strictly separated.
 
 1. The user selects an active knowledge base.
 2. The frontend sends the query with `kb_id`.
-3. Dense retrieval searches Qdrant with a payload filter on `kb_id`.
-4. Sparse retrieval searches the local BM25 index scoped to the same KB.
-5. Results are fused with RRF.
-6. The fused chunks are reranked with a graph-aware pass using entity and relation evidence from SQLite (configurable weights).
-7. The grounded context is sent to the knowledge agent.
-8. The answer is streamed back to the UI.
+3. (Optional) Query expansion enriches the query with matched entity labels from the knowledge graph.
+4. Dense retrieval searches Qdrant with a payload filter on `kb_id`.
+5. Sparse retrieval searches the local BM25 index scoped to the same KB.
+6. (Optional) Graph retrieval pulls chunk candidates directly from graph mention evidence.
+7. All channels are fused with RRF (2-way or 3-way depending on active channels).
+8. The fused chunks are reranked with a graph-aware pass using entity and relation evidence from SQLite (configurable weights).
+9. The grounded context is sent to the knowledge agent.
+10. The answer is streamed back to the UI.
 
 ## 🧩 Core capabilities
 
@@ -161,8 +164,19 @@ Current scope:
 
 - active only on `POST /chat`
 - uses graph evidence already persisted during ingestion
-- does not replace RRF, query expansion, or multi-hop traversal
+- does not replace RRF or multi-hop traversal
 - does not change the graph inspection APIs
+
+### Graph-augmented retrieval (query expansion & graph retrieval)
+
+Two opt-in retrieval features, independent and additive to the existing hybrid retriever:
+
+- `GRAPH_QUERY_EXPANSION_ENABLED` (default: `false`) — enrich queries with matched entity labels before retrieval
+- `GRAPH_QUERY_EXPANSION_MAX_TERMS` (default: `4`) — max added terms per query
+- `GRAPH_RETRIEVAL_ENABLED` (default: `false`) — add a third retrieval channel from graph mention evidence
+- `GRAPH_RETRIEVAL_TOP_K` (default: `6`) — max candidates from the graph channel
+
+Both default to `false`; the chat path behaves identically to previous versions when disabled.
 
 ### `APP_ENV` modes
 
@@ -212,11 +226,14 @@ Connect Claude Desktop or VS Code Copilot (point at the backend proxy):
 {
   "mcpServers": {
     "nanoRAG": {
-      "url": "http://localhost:8000/mcp"
+      "transport": "streamable-http",
+      "url": "http://localhost:8000/mcp",
+      "env": {
+        "MCP_API_KEY": "YDmq1a$wGDoNY2hj"
+      }
     }
   }
 }
-```
 
 See the full MCP reference in [docs/mcp-server.md](docs/mcp-server.md).
 
@@ -286,6 +303,7 @@ Notes:
 - [docs/hybrid-search.md](docs/hybrid-search.md)
 - [docs/providers.md](docs/providers.md)
 - [docs/mcp-server.md](docs/mcp-server.md)
+- [docs/observability.md](docs/observability.md)
 - [docs/tests.md](docs/tests.md)
 
 ## 🎯 Design goals
@@ -304,10 +322,10 @@ Planned retrieval-path integrations:
 
 | Phase | Feature | Status |
 |-------|---------|--------|
-| 1 | Query expansion from graph entities | _planned_ |
-| 2 | Graph retrieval as third retrieval channel | _planned_ |
+| 1 | Query expansion from graph entities | ✅ done |
+| 2 | Graph retrieval as third retrieval channel | ✅ done |
 | 3 | Multi-hop traversal for relational queries | _planned_ |
 
 ## 📄 License
 
-Add the license that matches your intended GitHub distribution.
+MIT License
