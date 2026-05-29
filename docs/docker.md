@@ -1,4 +1,4 @@
-# Docker
+# nanoRAG — Docker
 
 The repository ships with a single `docker-compose.yml` for local deployment.
 

@@ -1,4 +1,4 @@
-# Frontend
+# nanoRAG — Frontend
 
 The frontend is a Next.js App Router application with a client-heavy shell optimized for document QA.
 

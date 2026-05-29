@@ -1,4 +1,4 @@
-# MCP Server
+# nanoRAG — MCP Server
 
 nanoRAG exposes a Model Context Protocol (MCP) server that lets external AI agents query knowledge bases, retrieve documents, inspect knowledge graphs, and chat against indexed content.
 

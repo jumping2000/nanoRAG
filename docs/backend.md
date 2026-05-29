@@ -1,4 +1,4 @@
-# Backend
+# nanoRAG — Backend
 
 The backend is a single FastAPI service organized around retrieval, ingestion and agent execution.
 

@@ -1,4 +1,4 @@
-# Development
+# nanoRAG — Development
 
 ## Prerequisites
 

@@ -65,3 +65,6 @@ exclude = ["data/"]
 pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+  "integration: tests that require external services (MCP server, backend, etc.)",
+]

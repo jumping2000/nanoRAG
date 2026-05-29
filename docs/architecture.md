@@ -1,4 +1,4 @@
-# Architecture
+# nanoRAG — Architecture
 
 nanoRAG is a minimal agentic RAG platform with a strict separation between retrieval and reasoning.
 

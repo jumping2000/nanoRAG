@@ -1,4 +1,4 @@
-# API
+# nanoRAG — API
 
 ## Response headers
 

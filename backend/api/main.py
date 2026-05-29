@@ -367,8 +367,10 @@ async def mcp_proxy(path: str, request: Request):
 
     # If configured for HTTP transport, forward to the MCP HTTP server.
     if mcp_transport == "streamable-http":
-        # Build upstream URL
-        upstream = f"{mcp_http_url.rstrip('/')}/{path.lstrip('/')}"
+        # Build upstream URL (avoids double-slash and trailing slash redirects)
+        base = mcp_http_url.rstrip('/')
+        clean_path = path.strip('/')
+        upstream = f"{base}/{clean_path}" if clean_path else base
         method = request.method.upper()
         # Forward relevant headers (preserve X-API-Key)
         headers = {k: v for k, v in request.headers.items() if k.lower() != 'host'}

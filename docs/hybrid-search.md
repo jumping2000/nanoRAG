@@ -1,4 +1,4 @@
-# Hybrid Search
+# nanoRAG — Hybrid Search
 
 nanoRAG combines dense retrieval and sparse BM25 retrieval, merges both rankings with Reciprocal Rank Fusion, then applies a small graph-aware reranking pass on chat candidates.
 

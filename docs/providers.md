@@ -1,4 +1,4 @@
-# Providers
+# nanoRAG — Providers
 
 Both generation and embeddings are provider-agnostic.
 
