@@ -1,6 +1,6 @@
 # nanoRAG
 
-🚀 A modern, minimal, modular, production-ready Agentic RAG platform built with FastAPI, Agno, Next.js, Qdrant, and local hybrid retrieval.
+🚀 A modern, minimal, modular Agentic Hybrid RAG platform with knowledge graph exploration — built with FastAPI, Agno, Next.js, Qdrant, and local hybrid retrieval.
 
 ## ✨ Overview
 
@@ -8,11 +8,12 @@ nanoRAG is designed for teams that want a clean RAG system without unnecessary i
 
 - 🧠 Agentic answer generation with Agno
 - 🔎 Hybrid retrieval with dense search + BM25 + RRF
-- 🔁 Minimal graph-aware reranking on the `/chat` path
+- 🔁 Graph-aware reranking on the `/chat` path
+- 🕸️ Knowledge graph extraction with structured LLM pipeline and KB-scoped inspection
+- 🗺️ Graph node detail API with evidence-backed relation inspection
 - 🗂️ Multi-knowledge-base support with KB-scoped chat and uploads
 - 🧱 Single shared Qdrant collection filtered by `kb_id`
-- 🔌 MCP server for agentic access from Claude Desktop, VS Code Copilot, and other MCP clients
-- 🕸️ Lightweight knowledge graph extraction with KB-scoped graph inspection
+- 🔌 MCP server for agentic access (stdio + streamable-http)
 - 💻 CPU-friendly backend, including CPU-only PyTorch setup
 - 🌊 Streaming chat responses over NDJSON
 - 🛡️ No raw PDF/TXT/MD retention after ingestion, only chunks and metadata
@@ -26,6 +27,8 @@ The platform keeps retrieval and reasoning strictly separated.
 - Vector store: Qdrant
 - Sparse retrieval: `rank-bm25`
 - Fusion: Reciprocal Rank Fusion
+- Graph store: SQLite-backed mention-level knowledge graph
+- Graph reranker: configurable entity/relation weighting on chat candidates
 - Metadata catalog: local JSON records for knowledge bases and documents
 
 ### Retrieval flow
@@ -35,7 +38,7 @@ The platform keeps retrieval and reasoning strictly separated.
 3. Dense retrieval searches Qdrant with a payload filter on `kb_id`.
 4. Sparse retrieval searches the local BM25 index scoped to the same KB.
 5. Results are fused with RRF.
-6. The fused chunks are reranked with a small graph-aware bonus derived from per-chunk graph evidence already stored in SQLite.
+6. The fused chunks are reranked with a graph-aware pass using entity and relation evidence from SQLite (configurable weights).
 7. The grounded context is sent to the knowledge agent.
 8. The answer is streamed back to the UI.
 
@@ -193,11 +196,15 @@ See the full API reference in [docs/api.md](docs/api.md).
 
 ### MCP server
 
-nanoRAG exposes a **Model Context Protocol** surface for agentic access. The MCP server runs as a subprocess inside the backend and communicates over `stdio` (NDJSON-framed JSON-RPC). The FastAPI backend starts the subprocess and provides an HTTP proxy at `/mcp` so external MCP clients can connect to the backend.
+nanoRAG exposes a **Model Context Protocol** surface for agentic access. The MCP server supports two transports:
+
+- `stdio` (default): runs as a subprocess inside the backend, communicating over NDJSON-framed JSON-RPC
+- `streamable-http`: runs as a standalone HTTP server (default port `8100`, configurable via `MCP_HTTP_PORT`)
+
+The FastAPI backend provides an HTTP proxy at `/mcp` for both transports, protected by `X-API-Key` authentication (`MCP_API_KEY`).
 
 - 8 MCP tools for KB inspection, chat, graph exploration, and document management
 - Same runtime as the REST API — shared retrieval, graph store, and agents
-- MCP subprocess transport: `stdio` (backend proxies HTTP clients at `/mcp`)
 
 Connect Claude Desktop or VS Code Copilot (point at the backend proxy):
 
@@ -274,10 +281,12 @@ Notes:
 - [docs/api.md](docs/api.md)
 - [docs/backend.md](docs/backend.md)
 - [docs/development.md](docs/development.md)
+- [docs/docker.md](docs/docker.md)
 - [docs/frontend.md](docs/frontend.md)
 - [docs/hybrid-search.md](docs/hybrid-search.md)
 - [docs/providers.md](docs/providers.md)
 - [docs/mcp-server.md](docs/mcp-server.md)
+- [docs/tests.md](docs/tests.md)
 
 ## 🎯 Design goals
 
@@ -286,6 +295,18 @@ Notes:
 - Modular components without premature microservices
 - Production-ready defaults with local-first ergonomics
 - Easy extension path for future global or cross-KB retrieval
+- Graph extraction is additive to retrieval, not a replacement
+
+## 🗺️ Roadmap
+
+The knowledge graph currently powers inspection and conservative reranking.
+Planned retrieval-path integrations:
+
+| Phase | Feature | Status |
+|-------|---------|--------|
+| 1 | Query expansion from graph entities | _planned_ |
+| 2 | Graph retrieval as third retrieval channel | _planned_ |
+| 3 | Multi-hop traversal for relational queries | _planned_ |
 
 ## 📄 License
 

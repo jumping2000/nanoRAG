@@ -19,7 +19,9 @@ uv run api.main:app --reload
 docker compose up -d backend
 ```
 
-The backend exposes an HTTP proxy at `http://localhost:8000/mcp`. You can run MCP in two modes:
+The backend exposes an HTTP proxy at `http://localhost:8000/mcp`. Requests must include an `X-API-Key` header matching the `MCP_API_KEY` environment variable.
+
+You can run MCP in two modes:
 
 - `stdio` (default): the backend starts MCP as a subprocess and communicates over STDIO.
 - `streamable-http`: MCP runs as an HTTP server (default port `8100`, configurable via `MCP_HTTP_PORT`) and the backend forwards requests to it.
@@ -35,21 +37,19 @@ If you need to run the MCP server by itself for debugging, you can start the MCP
 Run MCP as a standalone STDIO subprocess (developer/debug):
 
 ```bash
-# from repository root
-python backend/mcp_server_start.py
+uv run --directory backend python mcp_server_start.py
 ```
 
 Run MCP as a streamable HTTP server (listen on the port configured by `MCP_HTTP_PORT`, default 8100):
 
 ```bash
-MCP_TRANSPORT=streamable-http python backend/mcp_server_start.py
+MCP_TRANSPORT=streamable-http uv run --directory backend python mcp_server_start.py
 ```
 
 Or run the backend (which will either start the subprocess or forward to an external MCP HTTP server depending on `MCP_TRANSPORT`):
 
 ```bash
-cd backend
-uv run api.main:app --reload
+uv run --directory backend uvicorn api.main:app --reload
 ```
 
 Example: call `nanorag_chat` via the backend proxy (non-streaming JSON response):

@@ -10,6 +10,7 @@ nanoRAG is a minimal agentic RAG platform with a strict separation between retri
 - The backend stays monolithic and modular.
 - The frontend is client-heavy, responsive and streaming-first.
 - Multi-KB isolation uses metadata filtering, not per-KB infrastructure.
+- Graph extraction is additive to retrieval, not a replacement.
 
 ## High-level components
 
@@ -19,7 +20,9 @@ nanoRAG is a minimal agentic RAG platform with a strict separation between retri
 - Qdrant collection strategy: single shared `nanorag_chunks` collection.
 - Sparse retrieval: local BM25 with rank-bm25.
 - Fusion: Reciprocal Rank Fusion.
-- Post-retrieval reranking: graph-aware bonus on chat candidates.
+- Post-retrieval reranking: graph-aware bonus on chat candidates (configurable entity/relation weights).
+- Graph store: SQLite (`knowledge_graph.db`) with mention-level entity and relation rows.
+- Graph extraction: heuristic + structured LLM pipeline with canonicalization.
 - Providers: OpenAI-compatible APIs and Ollama.
 - KB metadata store: local JSON metadata for KBs and documents only.
 
@@ -82,6 +85,31 @@ This version deliberately excludes:
 
 Current boundaries:
 
-- reranking exists, but only as a minimal graph-aware pass on chat candidates
-- there is still no graph-driven query expansion or graph-only retrieval
+- reranking exists with configurable entity/relation weighting on chat candidates
+- graph-driven query expansion and graph retrieval are planned but not yet implemented
 - the knowledge graph remains additive to hybrid retrieval rather than replacing it
+
+## Knowledge Graph
+
+The knowledge graph is extracted during ingestion and stored as mention-level
+rows in SQLite (`backend/data/knowledge_graph.db`).
+
+**Extraction:** two modes — heuristic (`graph_extractor.py`) and structured
+LLM (`structured_graph_extractor.py`), selectable via `GRAPH_EXTRACTION_ENABLED`.
+Entities and relations carry confidence scores; canonicalization is deterministic
+and local (`graph_normalization.py`).
+
+**Storage:** tables `entity_mentions` and `relation_mentions`, each scoped by
+`kb_id` and `chunk_id`. Relations link source and target entities with a
+predicate and confidence.
+
+**Retrieval integration (current):** the `GraphReranker` loads per-chunk graph
+summaries and applies a conservative bonus to chunks with stronger relation
+evidence. Default weights: retrieval 75%, graph 25% — configurable per instance.
+
+**Inspection APIs:** `GET /kb/{kb_id}/graph` returns an aggregate snapshot;
+`GET /kb/{kb_id}/graph/node/{entity_id}` returns per-node detail with
+evidence-backed relations, neighbor nodes, and backing documents.
+
+**MCP tools:** `nanorag_get_graph` and `nanorag_get_node_detail` expose the
+same inspection surface to external AI agents.

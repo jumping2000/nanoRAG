@@ -8,7 +8,7 @@ The backend is a single FastAPI service organized around retrieval, ingestion an
 - `agents/`: Orchestrator and Knowledge agent wrappers built with Agno.
 - `chunking/`: structural chunking logic.
 - `providers/`: LLM and embedding provider abstraction.
-- `retrieval/`: dense search, sparse BM25, fusion, and graph-aware reranking.
+- `retrieval/`: dense search, sparse BM25, fusion, graph query expansion (planned), and graph-aware reranking.
 - `rag/`: ingestion, KB/document catalog, graph extraction/store, and metadata helpers.
 - `db/`: Qdrant client bootstrap.
 
@@ -53,7 +53,7 @@ Responsibilities:
 
 ### Graph-aware reranking
 
-The first graph-aware improvement is intentionally narrow.
+The chat path applies a graph-aware reranking pass after dense + BM25 + RRF.
 
 Current runtime behavior:
 
@@ -61,6 +61,7 @@ Current runtime behavior:
 - the candidate set still comes from dense + sparse + RRF
 - the backend reads chunk-scoped graph evidence from the SQLite graph store
 - relation-bearing chunks receive more bonus than entity-only chunks
+- configurable weights: `retrieval_weight` (default 0.75), `graph_weight` (0.25), `entity_weight` (0.35), `relation_weight` (0.65)
 - if graph evidence is absent or weak, the original hybrid order is preserved
 
 The implementation is split across:
