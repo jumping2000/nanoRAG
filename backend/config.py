@@ -76,6 +76,10 @@ class Settings:
     graph_extraction_model: str
     graph_extraction_max_chunks_per_document: int
     graph_extraction_min_confidence: float
+    graph_query_expansion_enabled: bool
+    graph_query_expansion_max_terms: int
+    graph_retrieval_enabled: bool
+    graph_retrieval_top_k: int
     graph_extraction_prompt_path: Path
 
     @property
@@ -133,6 +137,11 @@ def get_settings() -> Settings:
 
     graph_extraction_model = os.getenv("GRAPH_EXTRACTION_MODEL", os.getenv("LLM_MODEL", "gpt-4o-mini")).strip()
 
+    graph_query_expansion_enabled = _bool_env("GRAPH_QUERY_EXPANSION_ENABLED", False)
+    graph_query_expansion_max_terms = int(os.getenv("GRAPH_QUERY_EXPANSION_MAX_TERMS", "4"))
+    graph_retrieval_enabled = _bool_env("GRAPH_RETRIEVAL_ENABLED", False)
+    graph_retrieval_top_k = int(os.getenv("GRAPH_RETRIEVAL_TOP_K", "6"))
+
     return Settings(
         app_name="nanoRAG",
         environment=_read_environment(),
@@ -169,5 +178,9 @@ def get_settings() -> Settings:
         graph_extraction_model=graph_extraction_model,
         graph_extraction_max_chunks_per_document=max(0, int(os.getenv("GRAPH_EXTRACTION_MAX_CHUNKS_PER_DOCUMENT", "24"))),
         graph_extraction_min_confidence=min(1.0, max(0.0, float(os.getenv("GRAPH_EXTRACTION_MIN_CONFIDENCE", "0.55")))),
+        graph_query_expansion_enabled=graph_query_expansion_enabled,
+        graph_query_expansion_max_terms=graph_query_expansion_max_terms,
+        graph_retrieval_enabled=graph_retrieval_enabled,
+        graph_retrieval_top_k=graph_retrieval_top_k,
         graph_extraction_prompt_path=BASE_DIR / "prompts" / "graph_extraction.md",
     )
