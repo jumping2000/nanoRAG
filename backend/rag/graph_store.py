@@ -582,3 +582,104 @@ class GraphStore:
     def _top_key(counts: object) -> str:
         options = counts if isinstance(counts, dict) else {}
         return sorted(options.items(), key=lambda item: (-item[1], item[0]))[0][0] if options else "concept"
+
+    def find_entities_by_label(
+        self, kb_id: str, terms: list[str], limit: int = 8,
+    ) -> list[str]:
+        """Return canonical entity_ids whose labels contain any of the given terms."""
+        if not terms:
+            return []
+        like_clauses = " OR ".join(["entity_label LIKE ?" for _ in terms])
+        params: list[object] = [kb_id] + [f"%{t}%" for t in terms] + [limit]
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT entity_id, COUNT(*) AS mention_count
+                FROM entity_mentions
+                WHERE kb_id = ? AND ({like_clauses})
+                GROUP BY entity_id
+                ORDER BY mention_count DESC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        return [str(row["entity_id"]) for row in rows]
+
+    def get_neighbor_labels(
+        self, kb_id: str, entity_ids: list[str], limit: int = 12,
+    ) -> list[str]:
+        """Return distinct labels of entities adjacent to the given entities."""
+        if not entity_ids:
+            return []
+        placeholders = ", ".join("?" for _ in entity_ids)
+        params: list[object] = [kb_id] + entity_ids + entity_ids + [limit]
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT e.entity_label, COUNT(*) AS edge_count
+                FROM relation_mentions r
+                JOIN entity_mentions e ON e.kb_id = r.kb_id AND e.entity_id = r.target_id
+                WHERE r.kb_id = ? AND r.source_id IN ({placeholders})
+                GROUP BY e.entity_label
+                UNION ALL
+                SELECT e.entity_label, COUNT(*) AS edge_count
+                FROM relation_mentions r
+                JOIN entity_mentions e ON e.kb_id = r.kb_id AND e.entity_id = r.source_id
+                WHERE r.kb_id = ? AND r.target_id IN ({placeholders})
+                GROUP BY e.entity_label
+                ORDER BY edge_count DESC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        return [str(row["entity_label"]) for row in rows]
+
+    def get_chunk_candidates_for_entities(
+        self, kb_id: str, entity_ids: list[str], limit: int = 24,
+    ) -> list[dict[str, object]]:
+        """Return chunk candidates with entity/relation mention stats."""
+        if not entity_ids:
+            return []
+        placeholders = ", ".join("?" for _ in entity_ids)
+        params: list[object] = [kb_id] + entity_ids + entity_ids + [limit]
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT chunk_id,
+                       COUNT(*) AS entity_count,
+                       0 AS relation_count,
+                       COALESCE(SUM(confidence), 0.0) AS confidence_sum
+                FROM entity_mentions
+                WHERE kb_id = ? AND entity_id IN ({placeholders})
+                GROUP BY chunk_id
+                UNION ALL
+                SELECT chunk_id,
+                       0 AS entity_count,
+                       COUNT(*) AS relation_count,
+                       COALESCE(SUM(confidence), 0.0) AS confidence_sum
+                FROM relation_mentions
+                WHERE kb_id = ? AND (source_id IN ({placeholders}) OR target_id IN ({placeholders}))
+                GROUP BY chunk_id
+                ORDER BY (entity_count + relation_count) DESC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        results: dict[str, dict[str, object]] = {}
+        for row in rows:
+            chunk_id = str(row["chunk_id"])
+            if chunk_id not in results:
+                results[chunk_id] = {"chunk_id": chunk_id, "entity_count": 0, "relation_count": 0, "confidence_sum": 0.0}
+            bucket = results[chunk_id]
+            bucket["entity_count"] = int(bucket["entity_count"]) + int(row["entity_count"])
+            bucket["relation_count"] = int(bucket["relation_count"]) + int(row["relation_count"])
+            bucket["confidence_sum"] = float(bucket["confidence_sum"]) + float(row["confidence_sum"])
+        aggregated = sorted(results.values(), key=lambda x: (int(x["entity_count"]) + int(x["relation_count"])), reverse=True)
+        return aggregated[:limit]
+
+    def get_chunks_for_entity_set(
+        self, kb_id: str, entity_ids: list[str], limit: int = 48,
+    ) -> list[str]:
+        """Return distinct chunk_ids for the given entities, ordered by relevance."""
+        candidates = self.get_chunk_candidates_for_entities(kb_id, entity_ids, limit=limit)
+        return [str(c["chunk_id"]) for c in candidates]
