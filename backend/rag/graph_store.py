@@ -587,6 +587,7 @@ class GraphStore:
         self, kb_id: str, terms: list[str], limit: int = 8,
     ) -> list[str]:
         """Return canonical entity_ids whose labels contain any of the given terms."""
+        started = time.perf_counter()
         if not terms:
             return []
         like_clauses = " OR ".join(["label LIKE ?" for _ in terms])
@@ -603,12 +604,24 @@ class GraphStore:
                 """,
                 params,
             ).fetchall()
-        return [str(row["entity_id"]) for row in rows]
+        result = [str(row["entity_id"]) for row in rows]
+        observe(
+            logger,
+            logging.DEBUG,
+            "graph_store",
+            "find_entities_by_label",
+            kb_id=kb_id,
+            term_count=len(terms),
+            result_count=len(result),
+            elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+        return result
 
     def get_neighbor_labels(
         self, kb_id: str, entity_ids: list[str], limit: int = 12,
     ) -> list[str]:
         """Return distinct labels of entities adjacent to the given entities."""
+        started = time.perf_counter()
         if not entity_ids:
             return []
         placeholders = ", ".join("?" for _ in entity_ids)
@@ -616,28 +629,44 @@ class GraphStore:
         with self._connect() as connection:
             rows = connection.execute(
                 f"""
-                SELECT e.label, COUNT(*) AS edge_count
-                FROM relation_mentions r
-                JOIN entity_mentions e ON e.kb_id = r.kb_id AND e.entity_id = r.target_id
-                WHERE r.kb_id = ? AND r.source_id IN ({placeholders})
-                GROUP BY e.label
-                UNION
-                SELECT e.label, COUNT(*) AS edge_count
-                FROM relation_mentions r
-                JOIN entity_mentions e ON e.kb_id = r.kb_id AND e.entity_id = r.source_id
-                WHERE r.kb_id = ? AND r.target_id IN ({placeholders})
-                GROUP BY e.label
-                ORDER BY edge_count DESC
+                SELECT label, SUM(cnt) AS total
+                FROM (
+                    SELECT e.label, COUNT(*) AS cnt
+                    FROM relation_mentions r
+                    JOIN entity_mentions e ON e.kb_id = r.kb_id AND e.entity_id = r.target_id
+                    WHERE r.kb_id = ? AND r.source_id IN ({placeholders})
+                    GROUP BY e.label
+                    UNION ALL
+                    SELECT e.label, COUNT(*) AS cnt
+                    FROM relation_mentions r
+                    JOIN entity_mentions e ON e.kb_id = r.kb_id AND e.entity_id = r.source_id
+                    WHERE r.kb_id = ? AND r.target_id IN ({placeholders})
+                    GROUP BY e.label
+                )
+                GROUP BY label
+                ORDER BY total DESC
                 LIMIT ?
                 """,
                 params,
             ).fetchall()
-        return [str(row["label"]) for row in rows]
+        result = [str(row["label"]) for row in rows]
+        observe(
+            logger,
+            logging.DEBUG,
+            "graph_store",
+            "get_neighbor_labels",
+            kb_id=kb_id,
+            entity_count=len(entity_ids),
+            result_count=len(result),
+            elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+        return result
 
     def get_chunk_candidates_for_entities(
         self, kb_id: str, entity_ids: list[str], limit: int = 24,
     ) -> list[dict[str, object]]:
         """Return chunk candidates with entity/relation mention stats."""
+        started = time.perf_counter()
         if not entity_ids:
             return []
         placeholders = ", ".join("?" for _ in entity_ids)
@@ -660,7 +689,6 @@ class GraphStore:
                 FROM relation_mentions
                 WHERE kb_id = ? AND (source_id IN ({placeholders}) OR target_id IN ({placeholders}))
                 GROUP BY chunk_id
-                ORDER BY (entity_count + relation_count) DESC
                 """,
                 params,
             ).fetchall()
@@ -674,11 +702,36 @@ class GraphStore:
             bucket["relation_count"] = int(bucket["relation_count"]) + int(row["relation_count"])
             bucket["confidence_sum"] = float(bucket["confidence_sum"]) + float(row["confidence_sum"])
         aggregated = sorted(results.values(), key=lambda x: (int(x["entity_count"]) + int(x["relation_count"])), reverse=True)
-        return aggregated[:limit]
+        result = aggregated[:limit]
+        observe(
+            logger,
+            logging.DEBUG,
+            "graph_store",
+            "get_chunk_candidates_for_entities",
+            kb_id=kb_id,
+            entity_count=len(entity_ids),
+            raw_rows=len(rows),
+            result_count=len(result),
+            elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+        return result
 
     def get_chunks_for_entity_set(
         self, kb_id: str, entity_ids: list[str], limit: int = 48,
     ) -> list[str]:
         """Return distinct chunk_ids for the given entities, ordered by relevance."""
+        started = time.perf_counter()
         candidates = self.get_chunk_candidates_for_entities(kb_id, entity_ids, limit=limit)
-        return [str(c["chunk_id"]) for c in candidates]
+        result = [str(c["chunk_id"]) for c in candidates]
+        observe(
+            logger,
+            logging.DEBUG,
+            "graph_store",
+            "get_chunks_for_entity_set",
+            kb_id=kb_id,
+            entity_count=len(entity_ids),
+            candidate_count=len(candidates),
+            result_count=len(result),
+            elapsed_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+        return result
