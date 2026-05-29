@@ -21,6 +21,8 @@ nanoRAG is a minimal agentic RAG platform with a strict separation between retri
 - Sparse retrieval: local BM25 with rank-bm25.
 - Fusion: Reciprocal Rank Fusion.
 - Post-retrieval reranking: graph-aware bonus on chat candidates (configurable entity/relation weights).
+- Query expansion: deterministic entity-label matching from the knowledge graph (opt-in).
+- Graph retrieval: third retrieval channel pulling chunk candidates from graph mention evidence (opt-in).
 - Graph store: SQLite (`knowledge_graph.db`) with mention-level entity and relation rows.
 - Graph extraction: heuristic + structured LLM pipeline with canonicalization.
 - Providers: OpenAI-compatible APIs and Ollama.
@@ -32,10 +34,13 @@ nanoRAG is a minimal agentic RAG platform with a strict separation between retri
 flowchart TD
     A[User Query + kb_id] --> B[Orchestrator Agent]
     B --> C[Hybrid Retriever]
-    C --> D[Dense Search in Qdrant with kb_id filter]
-    C --> E[BM25 Sparse Search scoped to kb_id]
-    D --> F[RRF Fusion]
+    C --> QE[Query Expansion<br/>from graph entities]
+    QE --> D[Dense Search in Qdrant<br/>with kb_id filter]
+    QE --> E[BM25 Sparse Search<br/>scoped to kb_id]
+    QE --> GR[Graph Retrieval<br/>from mention evidence]
+    D --> F[RRF Fusion<br/>2-way or 3-way]
     E --> F
+    GR --> F
     F --> G[Graph-aware Reranker]
     G --> H[Top Chunks]
     H --> I[Knowledge Agent]
@@ -50,17 +55,23 @@ sequenceDiagram
     participant FE as Next.js Frontend
     participant API as FastAPI
     participant OR as Orchestrator Agent
+    participant QE as Query Expander
     participant HR as Hybrid Retriever
-    participant GR as Graph Reranker
+    participant GR as Graph Retriever
+    participant RR as Graph Reranker
     participant KA as Knowledge Agent
 
     U->>FE: Send message in active KB
     FE->>API: POST /chat
     API->>OR: Generate retrieval plan
-    API->>HR: dense + sparse retrieval with kb_id
-    HR-->>API: fused chunks
-    API->>GR: apply graph-aware reranking
-    GR-->>API: reranked chunks
+    API->>QE: Expand query (if enabled)
+    QE-->>API: expanded query + seed entities
+    API->>HR: dense + sparse + graph retrieval
+    HR->>GR: graph candidates (if enabled)
+    GR-->>HR: scored chunks
+    HR-->>API: RRF-fused chunks
+    API->>RR: apply graph-aware reranking
+    RR-->>API: reranked chunks
     API->>KA: grounded prompt with chunks
     KA-->>API: streaming tokens
     API-->>FE: NDJSON token stream
@@ -86,7 +97,7 @@ This version deliberately excludes:
 Current boundaries:
 
 - reranking exists with configurable entity/relation weighting on chat candidates
-- graph-driven query expansion and graph retrieval are planned but not yet implemented
+- graph-driven query expansion and graph retrieval are implemented and opt-in
 - the knowledge graph remains additive to hybrid retrieval rather than replacing it
 
 ## Knowledge Graph
@@ -103,9 +114,17 @@ and local (`graph_normalization.py`).
 `kb_id` and `chunk_id`. Relations link source and target entities with a
 predicate and confidence.
 
-**Retrieval integration (current):** the `GraphReranker` loads per-chunk graph
-summaries and applies a conservative bonus to chunks with stronger relation
-evidence. Default weights: retrieval 75%, graph 25% — configurable per instance.
+**Retrieval integration:** three complementary graph-powered features, all opt-in:
+
+- **GraphReranker** — loads per-chunk graph summaries and applies a conservative
+  bonus to chunks with stronger relation evidence. Default weights: retrieval
+  75%, graph 25% — configurable per instance.
+- **GraphQueryExpander** — tokenizes the query, matches tokens against entity
+  labels in SQLite, appends canonical and neighbor labels. Deterministic,
+  no LLM. Controlled by `GRAPH_QUERY_EXPANSION_ENABLED`.
+- **GraphRetriever** — third retrieval channel that pulls chunk candidates
+  directly from graph mention rows, scored by entity/relation mention counts
+  weighted by confidence. Controlled by `GRAPH_RETRIEVAL_ENABLED`.
 
 **Inspection APIs:** `GET /kb/{kb_id}/graph` returns an aggregate snapshot;
 `GET /kb/{kb_id}/graph/node/{entity_id}` returns per-node detail with
