@@ -8,7 +8,7 @@ The backend is a single FastAPI service organized around retrieval, ingestion an
 - `agents/`: Orchestrator and Knowledge agent wrappers built with Agno.
 - `chunking/`: structural chunking logic.
 - `providers/`: LLM and embedding provider abstraction.
-- `retrieval/`: dense search, sparse BM25, fusion, graph query expansion (planned), and graph-aware reranking.
+- `retrieval/`: dense search, sparse BM25, fusion, graph query expansion, graph retrieval, and graph-aware reranking.
 - `rag/`: ingestion, KB/document catalog, graph extraction/store, and metadata helpers.
 - `db/`: Qdrant client bootstrap.
 
@@ -71,6 +71,25 @@ The implementation is split across:
 - `backend/api/main.py`: chat-path wiring
 
 This keeps graph-aware behavior additive rather than invasive.
+
+### Graph-augmented retrieval
+
+Two additional retrieval features can be enabled independently:
+
+**Query expansion (`GRAPH_QUERY_EXPANSION_ENABLED`):**
+- tokenizes the user query and matches tokens against graph entity labels
+- appends up to `GRAPH_QUERY_EXPANSION_MAX_TERMS` canonical labels and neighbor labels to the search query
+- runs before dense and sparse retrieval, improving recall for alias-heavy queries
+- deterministic — no LLM calls
+
+**Graph retrieval (`GRAPH_RETRIEVAL_ENABLED`):**
+- adds a third retrieval channel that pulls chunk candidates directly from graph mention rows
+- scores candidates by entity mentions (×0.35) and relation mentions (×0.65) weighted by confidence
+- materializes `RetrievedChunk` objects via the existing sparse chunk store
+- fused with dense and sparse results via the same RRF utility
+- returns up to `GRAPH_RETRIEVAL_TOP_K` candidates
+
+Both features are additive to the existing hybrid retriever. When disabled (default), the chat path behaves identically to previous versions.
 
 ## Ingestion policy
 
