@@ -213,3 +213,48 @@ def test_chat_stream_uses_graph_reranked_chunk_order_for_answer_and_sources(monk
     assert captured_chunk_ids == ["finance-2", "finance-1"]
     assert [event["type"] for event in events] == ["meta", "token", "sources", "done"]
     assert [source["chunk_id"] for source in events[2]["sources"]] == ["finance-2", "finance-1"]
+
+
+def test_chat_path_passes_expander_when_expansion_enabled(monkeypatch) -> None:
+    """When query expansion is enabled, the chat endpoint passes the expander to hybrid_retriever."""
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("GRAPH_QUERY_EXPANSION_ENABLED", "true")
+    monkeypatch.setenv("GRAPH_RETRIEVAL_ENABLED", "false")
+    monkeypatch.setenv("MCP_TRANSPORT", "stdio")
+    monkeypatch.setenv("MCP_API_KEY", "test-key")
+    api_main = _load_api_main("development")
+
+    search_calls = []
+
+    def _fake_search(query, kb_id, top_k=None, expander=None, graph_retriever=None):
+        search_calls.append((query, kb_id, expander is not None, graph_retriever is not None))
+        return []
+
+    monkeypatch.setattr(api_main.hybrid_retriever, "search", _fake_search)
+    monkeypatch.setattr(
+        api_main.orchestrator,
+        "plan",
+        lambda msg: type("Plan", (), {"search_query": msg, "needs_retrieval": True})(),
+    )
+    monkeypatch.setattr(
+        api_main.knowledge_agent,
+        "stream_answer",
+        lambda msg, plan, chunks: iter(["test"]),
+    )
+    monkeypatch.setattr(
+        api_main.graph_reranker,
+        "rerank",
+        lambda kb_id, chunks: chunks,
+    )
+    monkeypatch.setattr(api_main.catalog, "get_kb", lambda kb_id: None)
+
+    client = TestClient(api_main.app)
+    response = client.post(
+        "/chat",
+        json={"kb_id": "kb1", "message": "what is SOA", "top_k": 3},
+        headers={"x-api-key": "test-key"},
+    )
+    assert response.status_code == 200
+    assert len(search_calls) == 1
+    assert search_calls[0][2] is True   # expander was passed
+    assert search_calls[0][3] is False  # graph_retriever was not passed
