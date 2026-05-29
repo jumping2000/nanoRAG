@@ -278,7 +278,6 @@ Notes:
 - [docs/hybrid-search.md](docs/hybrid-search.md)
 - [docs/providers.md](docs/providers.md)
 - [docs/mcp-server.md](docs/mcp-server.md)
-- [graph-retrieval-next-step.md](graph-retrieval-next-step.md)
 
 ## 🎯 Design goals
 

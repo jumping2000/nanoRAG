@@ -13,24 +13,39 @@ uv run api.main:app --reload
 
 ### Docker
 
-Run the backend service; the backend will start MCP as a subprocess and expose `/mcp` over HTTP.
+ Run the backend service; by default the backend will start MCP as a subprocess and expose `/mcp` over HTTP.
 
 ```bash
 docker compose up -d backend
 ```
 
-The backend provides an HTTP proxy at `http://localhost:8000/mcp` (streamable HTTP for external clients).
+The backend exposes an HTTP proxy at `http://localhost:8000/mcp`. You can run MCP in two modes:
+
+- `stdio` (default): the backend starts MCP as a subprocess and communicates over STDIO.
+- `streamable-http`: MCP runs as an HTTP server (default port `8100`, configurable via `MCP_HTTP_PORT`) and the backend forwards requests to it.
+
+Select the transport with the `MCP_TRANSPORT` environment variable (`stdio` or `streamable-http`).
+
+When using `streamable-http`, you can configure the listen port with `MCP_HTTP_PORT` (default `8100`). The backend constructs the upstream URL automatically; set `MCP_HTTP_URL` to override it entirely (e.g. to point at a remote MCP instance).
 
 ### Debug / standalone MCP
 
-If you need to run the MCP server by itself for debugging, you can start the MCP process directly. This runs the FastMCP app using the `stdio` transport and is useful when developing MCP tools:
+If you need to run the MCP server by itself for debugging, you can start the MCP process directly. Control the transport with `MCP_TRANSPORT`.
+
+Run MCP as a standalone STDIO subprocess (developer/debug):
 
 ```bash
 # from repository root
 python backend/mcp_server_start.py
 ```
 
-Alternatively run the backend (which will start the MCP subprocess for you):
+Run MCP as a streamable HTTP server (listen on the port configured by `MCP_HTTP_PORT`, default 8100):
+
+```bash
+MCP_TRANSPORT=streamable-http python backend/mcp_server_start.py
+```
+
+Or run the backend (which will either start the subprocess or forward to an external MCP HTTP server depending on `MCP_TRANSPORT`):
 
 ```bash
 cd backend
@@ -58,14 +73,17 @@ curl -X POST \
 
 ### Connect from Claude Desktop
 
-Add to `claude_desktop_config.json` (point to the backend proxy):
+Add to `claude_desktop_config.json` (point to the backend proxy or direct MCP HTTP server):
 
 ```json
 {
   "mcpServers": {
     "nanoRAG": {
-      "transport": "stdio",
-      "url": "http://localhost:8000/mcp"
+      "transport": "streamable-http",
+      "url": "http://localhost:8000/mcp",
+      "env": {
+        "MCP_API_KEY": "YDmq1a$wGDoNY2hj"
+      }
     }
   }
 }
@@ -79,8 +97,11 @@ Add to `.vscode/mcp.json` or the Copilot MCP settings (point to the backend prox
 {
   "mcpServers": {
     "nanoRAG": {
-      "transport": "stdio",
-      "url": "http://localhost:8000/mcp"
+      "transport": "streamable-http",
+      "url": "http://localhost:8000/mcp",
+      "headers": {
+        "X-API-Key": "changeme"
+      }
     }
   }
 }
