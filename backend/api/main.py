@@ -251,7 +251,26 @@ def delete_document(kb_id: str, document_id: str) -> DeleteResponse:
 def chat(request: ChatRequest) -> StreamingResponse:
     catalog.get_kb(request.kb_id)
     plan = orchestrator.plan(request.message)
-    chunks = hybrid_retriever.search(plan.search_query, kb_id=request.kb_id, top_k=request.top_k)
+    expander = None
+    if settings.graph_query_expansion_enabled:
+        from retrieval.graph_query_expander import GraphQueryExpander
+        expander = GraphQueryExpander(
+            graph_store,
+            max_terms=settings.graph_query_expansion_max_terms,
+        )
+
+    graph_retriever = None
+    if settings.graph_retrieval_enabled:
+        from retrieval.graph_search import GraphRetriever
+        graph_retriever = GraphRetriever(graph_store, sparse_retriever)
+
+    chunks = hybrid_retriever.search(
+        plan.search_query,
+        kb_id=request.kb_id,
+        top_k=request.top_k,
+        expander=expander,
+        graph_retriever=graph_retriever,
+    )
     chunks = graph_reranker.rerank(request.kb_id, chunks)
     observe(
         logger,
