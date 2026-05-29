@@ -612,7 +612,7 @@ class GraphStore:
         if not entity_ids:
             return []
         placeholders = ", ".join("?" for _ in entity_ids)
-        params: list[object] = [kb_id] + entity_ids + entity_ids + [limit]
+        params: list[object] = [kb_id] + entity_ids + [kb_id] + entity_ids + [limit]
         with self._connect() as connection:
             rows = connection.execute(
                 f"""
@@ -621,7 +621,7 @@ class GraphStore:
                 JOIN entity_mentions e ON e.kb_id = r.kb_id AND e.entity_id = r.target_id
                 WHERE r.kb_id = ? AND r.source_id IN ({placeholders})
                 GROUP BY e.label
-                UNION ALL
+                UNION
                 SELECT e.label, COUNT(*) AS edge_count
                 FROM relation_mentions r
                 JOIN entity_mentions e ON e.kb_id = r.kb_id AND e.entity_id = r.source_id
@@ -641,7 +641,7 @@ class GraphStore:
         if not entity_ids:
             return []
         placeholders = ", ".join("?" for _ in entity_ids)
-        params: list[object] = [kb_id] + entity_ids + entity_ids + [limit]
+        params: list[object] = [kb_id] + entity_ids + [kb_id] + entity_ids + entity_ids
         with self._connect() as connection:
             rows = connection.execute(
                 f"""
@@ -661,7 +661,6 @@ class GraphStore:
                 WHERE kb_id = ? AND (source_id IN ({placeholders}) OR target_id IN ({placeholders}))
                 GROUP BY chunk_id
                 ORDER BY (entity_count + relation_count) DESC
-                LIMIT ?
                 """,
                 params,
             ).fetchall()
