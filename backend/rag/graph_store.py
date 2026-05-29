@@ -589,7 +589,7 @@ class GraphStore:
         """Return canonical entity_ids whose labels contain any of the given terms."""
         if not terms:
             return []
-        like_clauses = " OR ".join(["entity_label LIKE ?" for _ in terms])
+        like_clauses = " OR ".join(["label LIKE ?" for _ in terms])
         params: list[object] = [kb_id] + [f"%{t}%" for t in terms] + [limit]
         with self._connect() as connection:
             rows = connection.execute(
@@ -616,23 +616,23 @@ class GraphStore:
         with self._connect() as connection:
             rows = connection.execute(
                 f"""
-                SELECT e.entity_label, COUNT(*) AS edge_count
+                SELECT e.label, COUNT(*) AS edge_count
                 FROM relation_mentions r
                 JOIN entity_mentions e ON e.kb_id = r.kb_id AND e.entity_id = r.target_id
                 WHERE r.kb_id = ? AND r.source_id IN ({placeholders})
-                GROUP BY e.entity_label
+                GROUP BY e.label
                 UNION ALL
-                SELECT e.entity_label, COUNT(*) AS edge_count
+                SELECT e.label, COUNT(*) AS edge_count
                 FROM relation_mentions r
                 JOIN entity_mentions e ON e.kb_id = r.kb_id AND e.entity_id = r.source_id
                 WHERE r.kb_id = ? AND r.target_id IN ({placeholders})
-                GROUP BY e.entity_label
+                GROUP BY e.label
                 ORDER BY edge_count DESC
                 LIMIT ?
                 """,
                 params,
             ).fetchall()
-        return [str(row["entity_label"]) for row in rows]
+        return [str(row["label"]) for row in rows]
 
     def get_chunk_candidates_for_entities(
         self, kb_id: str, entity_ids: list[str], limit: int = 24,
