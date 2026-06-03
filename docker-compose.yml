@@ -14,9 +14,10 @@ x-backend-env: &backend-env
   RETRIEVAL_TOP_K: ${RETRIEVAL_TOP_K:-6}
   CHUNK_SIZE_TOKENS: ${CHUNK_SIZE_TOKENS:-450}
   CHUNK_OVERLAP_TOKENS: ${CHUNK_OVERLAP_TOKENS:-80}
-  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://frontend:3000}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://127.0.0.1,http://localhost:3000,http://127.0.0.1:3000,http://frontend:3000}
   MCP_API_KEY: ${MCP_API_KEY:-changeme}
   MCP_HTTP_PORT: ${MCP_HTTP_PORT:-8100}
+
 services:
   qdrant:
     image: qdrant/qdrant:v1.17.1
@@ -38,8 +39,6 @@ services:
       dockerfile: backend/Dockerfile
     environment:
       <<: *backend-env
-    ports:
-      - "8000:8000"
     volumes:
       - ./backend/data:/app/data
     depends_on:
@@ -62,10 +61,6 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    environment:
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
-    ports:
-      - "3000:3000"
     depends_on:
       backend:
         condition: service_healthy
@@ -81,9 +76,7 @@ services:
       timeout: 5s
       retries: 6
 
-  # MCP is run as a subprocess inside the `backend` container (stdio transport).
-  # Optional: run MCP as a separate HTTP service (streamable-http transport).
-  mcp-server:
+  mcp:
     container_name: nanorag-mcp
     build:
       context: .
@@ -91,13 +84,47 @@ services:
     environment:
       <<: *backend-env
       MCP_TRANSPORT: streamable-http
-    ports:
-      - "${MCP_HTTP_PORT:-8100}:${MCP_HTTP_PORT:-8100}"
-    command: ["python", "backend/mcp_server_start.py"]
+    command: ["python", "mcp_server_start.py"]
     volumes:
-      - ./backend:/app/backend
+      - ./backend/data:/app/data
+    depends_on:
+      qdrant:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,os; port=os.environ.get('MCP_HTTP_PORT','8100'); urllib.request.urlopen(f'http://127.0.0.1:{port}/mcp/nanorag_health')\""]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, socket; s=socket.create_connection(('127.0.0.1', int(os.environ.get('MCP_HTTP_PORT', '8100'))), 5); s.close()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+
+  nginx:
+    container_name: nanorag-nginx
+    image: nginx:1.27-alpine
+    environment:
+      NGINX_ENVSUBST_FILTER: ^(MCP_HTTP_URL|MCP_API_KEY)$
+      MCP_API_KEY: ${MCP_API_KEY:-changeme}
+      MCP_HTTP_PORT: ${MCP_HTTP_PORT:-8100}
+      MCP_HTTP_URL: ${MCP_HTTP_URL:-http://mcp:${MCP_HTTP_PORT:-8100}/mcp}
+    ports:
+      - "8000:80"
+    volumes:
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/docker-entrypoint.d/40-validate-env.sh:/docker-entrypoint.d/40-validate-env.sh:ro
+      - ./nginx/.htpasswd:/etc/nginx/auth/.htpasswd:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+      mcp:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/nginx-health >/dev/null"]
       interval: 30s
       timeout: 5s
       retries: 10

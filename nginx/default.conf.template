@@ -1,0 +1,73 @@
+map $http_x_api_key $mcp_api_key_valid {
+    default 0;
+    "${MCP_API_KEY}" 1;
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    location = /nginx-health {
+        auth_basic off;
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+    }
+
+    auth_basic "nanoRAG";
+    auth_basic_user_file /etc/nginx/auth/.htpasswd;
+
+    location = /mcp {
+        auth_basic off;
+        if ($mcp_api_key_valid = 0) {
+            return 401;
+        }
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_read_timeout 300s;
+        proxy_set_header Authorization "";
+        proxy_set_header X-API-Key "";
+        proxy_pass ${MCP_HTTP_URL}$is_args$args;
+    }
+
+    location = /health {
+        proxy_pass http://backend:8000/health;
+    }
+
+    location /kb {
+        proxy_pass http://backend:8000;
+    }
+
+    location = /chat {
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_read_timeout 300s;
+        proxy_pass http://backend:8000/chat;
+    }
+
+    location /docs {
+        proxy_pass http://backend:8000;
+    }
+
+    location = /openapi.json {
+        proxy_pass http://backend:8000/openapi.json;
+    }
+
+    location /redoc {
+        proxy_pass http://backend:8000/redoc;
+    }
+
+    location /_next/ {
+        proxy_pass http://frontend:3000;
+    }
+
+    location / {
+        proxy_pass http://frontend:3000;
+    }
+}
