@@ -1,3 +1,5 @@
+# MCP_API_KEY must not contain '$' — the value is substituted
+# into the map directive below, where '$' starts a variable reference.
 map $http_x_api_key $mcp_api_key_valid {
     default 0;
     "${MCP_API_KEY}" 1;

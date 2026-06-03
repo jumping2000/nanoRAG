@@ -46,9 +46,13 @@ docker run --rm httpd:2.4-alpine htpasswd -nbB admin changeme > nginx/.htpasswd
 
 Required environment variables:
 
-- `MCP_API_KEY` — secret used by nginx for `/mcp`
+- `MCP_API_KEY` — secret used by nginx for `/mcp`. **Must not contain `$`** (the nginx map directive interprets it as a variable reference).
 - `MCP_HTTP_PORT` — internal listen port for the `mcp` service
-- `MCP_HTTP_URL` — optional upstream override, defaults to `http://mcp:${MCP_HTTP_PORT}/mcp`
+- `MCP_HTTP_URL` — optional upstream override, defaults to `http://mcp:${MCP_HTTP_PORT}/mcp`. **Do not use `localhost` or `127.0.0.1`** — this would cause nginx to route to itself instead of the `mcp` container.
+
+Optional:
+
+- `NEXT_PUBLIC_API_BASE_URL` — leave unset for same-origin API calls behind nginx. Set only for custom deployments.
 
 Public authentication model:
 
