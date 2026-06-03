@@ -8,8 +8,19 @@ import type {
   UploadResponse,
 } from "@/lib/types";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
+const explicitApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "");
+
+function resolveApiBaseUrl() {
+  if (explicitApiBaseUrl) {
+    return explicitApiBaseUrl;
+  }
+  if (typeof window !== "undefined" && window.location.port !== "3000") {
+    return window.location.origin;
+  }
+  return "http://localhost:8000";
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 export async function streamChat(
   body: { message: string; kb_id: string; top_k?: number },
