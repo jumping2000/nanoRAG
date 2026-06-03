@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-# MCP_SUBPROCESS_IMPORT_FIXED
-
 import json
 import logging
 import time
@@ -10,13 +8,8 @@ from collections.abc import Iterator
 
 from fastapi import BackgroundTasks,FastAPI, File, Query, Request, UploadFile
 import os
-import json
-import asyncio
 from fastapi.responses import StreamingResponse, JSONResponse
-from mcp_subprocess import AsyncMCPSubprocess
-import httpx
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 
 from agents.knowledge_agent import KnowledgeAgent
 from agents.orchestrator import OrchestratorAgent
@@ -336,115 +329,3 @@ def _event(payload: dict[str, object]) -> str:
     return json.dumps(payload, ensure_ascii=False) + "\n"
 
 
-# ---- MCP stdio bridge: start subprocess and proxy /mcp requests ----
-mcp_manager: AsyncMCPSubprocess | None = None
-mcp_transport = os.getenv("MCP_TRANSPORT", "stdio")
-_mcp_http_port = os.getenv("MCP_HTTP_PORT", "8100")
-mcp_http_url = os.getenv("MCP_HTTP_URL") or f"http://localhost:{_mcp_http_port}/mcp"
-
-
-@app.on_event("startup")
-async def _start_mcp_subprocess():
-    global mcp_manager
-    # Start subprocess only when configured for stdio transport.
-    if mcp_transport == "stdio":
-        mcp_manager = AsyncMCPSubprocess()
-        await mcp_manager.start()
-
-
-@app.on_event("shutdown")
-async def _stop_mcp_subprocess():
-    global mcp_manager
-    if mcp_transport == "stdio" and mcp_manager is not None:
-        await mcp_manager.stop()
-
-
-@app.api_route('/mcp/{path:path}', methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
-async def mcp_proxy(path: str, request: Request):
-    """Proxy HTTP requests to the MCP server.
-
-    When MCP_TRANSPORT=streamable-http, forwards requests to the MCP HTTP service.
-    When MCP_TRANSPORT=stdio (default), bridges requests to the MCP subprocess over STDIO.
-
-    Expects MCP messages framed as NDJSON with an `id` field. Authorization via `X-API-Key` header.
-    """
-    api_key = os.getenv('MCP_API_KEY')
-    header = request.headers.get('x-api-key')
-    if api_key and header != api_key:
-        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
-
-    # Determine tool name and params
-    tool_name = path.strip('/') or 'nanorag_health'
-    params = {}
-    if request.method in ("POST", "PUT", "PATCH"):
-        try:
-            raw_body = await request.body()
-            params = json.loads(raw_body) if raw_body else {}
-        except Exception:
-            params = {}
-    else:
-        params = dict(request.query_params)
-
-    accept = request.headers.get('accept', '')
-    stream = 'application/x-ndjson' in accept
-
-    # If configured for HTTP transport, forward to the MCP HTTP server.
-    if mcp_transport == "streamable-http":
-        # Build upstream URL (avoids double-slash and trailing slash redirects)
-        base = mcp_http_url.rstrip('/')
-        clean_path = path.strip('/')
-        upstream = f"{base}/{clean_path}" if clean_path else base
-        method = request.method.upper()
-        # Forward relevant headers (preserve X-API-Key)
-        headers = {k: v for k, v in request.headers.items() if k.lower() != 'host'}
-        try:
-            body = await request.body()
-        except Exception:
-            body = None
-
-        params = dict(request.query_params) if request.query_params else None
-
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                if stream:
-                    upstream_resp = await client.stream(method, upstream, headers=headers, params=params, content=body)
-
-                    async def _agen():
-                        try:
-                            async for chunk in upstream_resp.aiter_bytes():
-                                yield chunk
-                        finally:
-                            await upstream_resp.aclose()
-
-                    content_type = upstream_resp.headers.get('content-type', 'application/x-ndjson')
-                    return StreamingResponse(_agen(), media_type=content_type)
-                else:
-                    resp = await client.request(method, upstream, headers=headers, params=params, content=body)
-                    content_type = resp.headers.get('content-type', '')
-                    if 'application/json' in content_type:
-                        try:
-                            data = resp.json()
-                        except Exception:
-                            data = resp.text
-                        return JSONResponse(content=data, status_code=resp.status_code)
-                    # Fallback: return raw text
-                    return JSONResponse(content=resp.text, status_code=resp.status_code)
-        except httpx.HTTPError as exc:
-            return JSONResponse(status_code=502, content={"detail": str(exc)})
-
-    # Stdio transport: bridge requests to the MCP subprocess.
-    if mcp_manager is None:
-        return JSONResponse(status_code=503, content={"detail": "MCP subprocess not started"})
-
-    try:
-        if stream:
-            agen = await mcp_manager.call_tool(tool_name, params, stream=True)
-            return StreamingResponse(agen, media_type='application/x-ndjson')
-        else:
-            res = await mcp_manager.call_tool(tool_name, params, stream=False)
-            # If the subprocess returned an object with 'result', unwrap it
-            if isinstance(res, dict) and 'result' in res:
-                return JSONResponse(content=res['result'])
-            return JSONResponse(content=res)
-    except Exception as exc:
-        return JSONResponse(status_code=502, content={"detail": str(exc)})
