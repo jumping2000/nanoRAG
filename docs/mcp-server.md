@@ -11,24 +11,21 @@ cd backend
 uv run api.main:app --reload
 ```
 
-### Docker
+### Docker Compose
 
- Run the backend service; by default the backend will start MCP as a subprocess and expose `/mcp` over HTTP.
+Docker Compose publishes only `nginx` to the host. `nginx` serves the UI, forwards backend HTTP API routes, and exposes `/mcp`.
 
 ```bash
-docker compose up -d backend
+docker compose up -d --build
 ```
 
-The backend exposes an HTTP proxy at `http://localhost:8000/mcp`. Requests must include an `X-API-Key` header matching the `MCP_API_KEY` environment variable.
+Public routes:
 
-You can run MCP in two modes:
+- `http://localhost:8000/` -> frontend UI, requires Basic Auth
+- `http://localhost:8000/health`, `http://localhost:8000/kb`, `http://localhost:8000/chat` -> backend API, requires Basic Auth
+- `http://localhost:8000/mcp` -> dedicated MCP HTTP service, requires `X-API-Key` only
 
-- `stdio` (default): the backend starts MCP as a subprocess and communicates over STDIO.
-- `streamable-http`: MCP runs as an HTTP server (default port `8100`, configurable via `MCP_HTTP_PORT`) and the backend forwards requests to it.
-
-Select the transport with the `MCP_TRANSPORT` environment variable (`stdio` or `streamable-http`).
-
-When using `streamable-http`, you can configure the listen port with `MCP_HTTP_PORT` (default `8100`). The backend constructs the upstream URL automatically; set `MCP_HTTP_URL` to override it entirely (e.g. to point at a remote MCP instance).
+`MCP_TRANSPORT=stdio` remains available for local standalone MCP clients. In Compose, the dedicated `mcp` service runs `streamable-http` behind `nginx`.
 
 ### Debug / standalone MCP
 
@@ -52,28 +49,26 @@ Or run the backend (which will either start the subprocess or forward to an exte
 uv run --directory backend uvicorn api.main:app --reload
 ```
 
-Example: call `nanorag_chat` via the backend proxy (non-streaming JSON response):
+Example: initialize an MCP session through nginx.
 
 ```bash
 curl -X POST \
   -H "Content-Type: application/json" \
-  -d '{"kb_id":"arch-new","message":"fai un breve riassunto della architettura soa"}' \
-  http://localhost:8000/mcp/nanorag_chat
+  -H "Accept: application/json, text/event-stream" \
+  -H "X-API-Key: ${MCP_API_KEY}" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}' \
+  http://localhost:8000/mcp
 ```
 
-Example: request a streaming NDJSON response (accept header):
+Example: call the backend health endpoint through nginx with Basic Auth.
 
 ```bash
-curl -X POST \
-  -H "Accept: application/x-ndjson" \
-  -H "Content-Type: application/json" \
-  -d '{"kb_id":"arch-new","message":"fai un breve riassunto della architettura soa"}' \
-  http://localhost:8000/mcp/nanorag_chat
+curl -u admin:changeme http://localhost:8000/health
 ```
 
 ### Connect from Claude Desktop
 
-Add to `claude_desktop_config.json` (point to the backend proxy or direct MCP HTTP server):
+Add to `claude_desktop_config.json`:
 
 ```json
 {
@@ -91,7 +86,7 @@ Add to `claude_desktop_config.json` (point to the backend proxy or direct MCP HT
 
 ### Connect from VS Code Copilot
 
-Add to `.vscode/mcp.json` or the Copilot MCP settings (point to the backend proxy):
+Add to `.vscode/mcp.json` or the Copilot MCP settings:
 
 ```json
 {

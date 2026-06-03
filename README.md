@@ -91,9 +91,14 @@ docker compose -f docker-compose.yml up --build
 
 Services:
 
-- Frontend: http://localhost:3000
-- Backend: http://localhost:8000
+- Public entrypoint: http://localhost:8000
 - Qdrant: http://localhost:6333
+
+Public access rules:
+
+- UI and backend HTTP API require Basic Auth through nginx
+- `/mcp` requires `X-API-Key` and does not use Basic Auth
+- backend, frontend, and mcp are internal-only in Compose
 
 ## 🛠️ Local development
 
@@ -215,12 +220,12 @@ nanoRAG exposes a **Model Context Protocol** surface for agentic access. The MCP
 - `stdio` (default): runs as a subprocess inside the backend, communicating over NDJSON-framed JSON-RPC
 - `streamable-http`: runs as a standalone HTTP server (default port `8100`, configurable via `MCP_HTTP_PORT`)
 
-The FastAPI backend provides an HTTP proxy at `/mcp` for both transports, protected by `X-API-Key` authentication (`MCP_API_KEY`).
+The public MCP endpoint is exposed by nginx at `/mcp` and forwarded to a dedicated MCP service running in `streamable-http` mode. The backend no longer proxies MCP traffic over HTTP. Local standalone MCP clients should use the `stdio` transport by launching `python mcp_server_start.py` directly, while the frontend uses the same public origin behind nginx.
 
 - 8 MCP tools for KB inspection, chat, graph exploration, and document management
 - Same runtime as the REST API — shared retrieval, graph store, and agents
 
-Connect Claude Desktop or VS Code Copilot (point at the backend proxy):
+Connect Claude Desktop or VS Code Copilot (point at the nginx MCP endpoint):
 
 ```json
 {
