@@ -19,6 +19,11 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "nanoRAG",
   description: "Minimal, modular and production-ready agentic RAG",
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
