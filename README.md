@@ -234,7 +234,7 @@ Connect Claude Desktop or VS Code Copilot (point at the nginx MCP endpoint):
       "transport": "streamable-http",
       "url": "http://localhost:8000/mcp",
       "env": {
-        "MCP_API_KEY": "YDmq1a$wGDoNY2hj"
+        "MCP_API_KEY": "YKmq57LwGDoNY2hj"
       }
     }
   }

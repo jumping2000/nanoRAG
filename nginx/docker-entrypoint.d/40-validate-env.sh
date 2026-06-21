@@ -15,13 +15,6 @@ fi
 
 : "${MCP_API_KEY:?MCP_API_KEY must be set for /mcp exposure}"
 
-case "$MCP_API_KEY" in
-  *\$*)
-    echo "MCP_API_KEY must not contain '$' (nginx map directive interprets it as a variable)" >&2
-    exit 1
-    ;;
-esac
-
 MCP_HTTP_URL="${MCP_HTTP_URL:-http://mcp:${MCP_HTTP_PORT:-8100}/mcp}"
 case "$MCP_HTTP_URL" in
   http://*|https://*) ;;

@@ -6,6 +6,7 @@ from io import BytesIO
 
 from fastapi import UploadFile
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.server import TransportSecuritySettings
 
 from agents.knowledge_agent import KnowledgeAgent
 from agents.orchestrator import OrchestratorAgent
@@ -24,7 +25,12 @@ hybrid_retriever = HybridRetriever(settings, dense_retriever, sparse_retriever)
 orchestrator = OrchestratorAgent(settings)
 knowledge_agent = KnowledgeAgent(settings)
 
-mcp = FastMCP(name="nanoRAG")
+mcp = FastMCP(
+    name="nanoRAG",
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,
+    ),
+)
 
 
 @mcp.tool()
@@ -47,9 +53,7 @@ def nanorag_list_kbs() -> list[dict]:
 @mcp.tool()
 def nanorag_list_documents(kb_id: str) -> list[dict]:
     """List all documents in the specified knowledge base."""
-    return [
-        document.model_dump() for document in ingestion_service.list_documents(kb_id)
-    ]
+    return [document.model_dump() for document in ingestion_service.list_documents(kb_id)]
 
 
 @mcp.tool()
@@ -62,13 +66,17 @@ def nanorag_get_graph(kb_id: str, limit: int = 18, min_weight: int = 1) -> dict:
 
 @mcp.tool()
 def nanorag_get_node_detail(
-    kb_id: str, entity_id: str, evidence_limit: int = 12,
+    kb_id: str,
+    entity_id: str,
+    evidence_limit: int = 12,
 ) -> dict:
     """Get detailed evidence and relations for one graph entity."""
     catalog.get_kb(kb_id)
     try:
         detail = graph_store.get_node_detail(
-            kb_id=kb_id, entity_id=entity_id, evidence_limit=evidence_limit,
+            kb_id=kb_id,
+            entity_id=entity_id,
+            evidence_limit=evidence_limit,
         )
         return detail.model_dump()
     except LookupError:
